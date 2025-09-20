@@ -3,11 +3,14 @@ import papishares
 
 app = Flask(__name__)
 
+@app.route('/data')
+def get_data():
+    orders = papishares.get_stop_losses()
+    return sorted(orders, key=lambda order: order['profit_pct'], reverse=True)
+
 @app.route('/')
 def index():
-    orders = papishares.get_stop_losses()
-    sorted_orders = sorted(orders, key=lambda order: order['profit_pct'], reverse=True)
-    return render_template('orders.html', orders=sorted_orders)
+    return render_template('orders.html')
 
 @app.route("/healthz")
 def healthz():

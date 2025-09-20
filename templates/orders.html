@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-<meta http-equiv="refresh" content="1">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -75,68 +74,91 @@
 </head>
 <body>
     <h1>Current Positions</h1>
-    {% if orders %}
-        <table>
-            <thead>
-                <tr>
-                    <th style="text-align: center;">Ticker</th>
-                    <th style="text-align: center;">Name</th>
-                    <th style="text-align: center;">Quantity</th>
-                    <th style="text-align: center;">Currency</th>
-                    <th style="text-align: center;width: 10%;">Purchased Price</th>
-                    <th style="text-align: center;width: 10%;">Current Price</th>
-                    <th style="text-align: center;width: 10%;;">Current P/L %</th>
-                    <th style="text-align: center;width: 10%;">Recommended Stop-Loss</th>
-                    <th style="text-align: center;width: 10%;">Current Stop-Loss Price</th>
-                    <th style="text-align: center;width: 10%;">Current Stop-Loss Distance</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for order in orders %}
-                    <tr>
-                        <td><strong>{{ order.ticker }}</strong></td>
-                        <td><strong>{{ order.name }}</strong></td>
-                        <td style="text-align: right;">{{ order.quantity }}</td>
-                        <td style="text-align: center; font-size: 32px; padding: 0px;">{{ order.currency }}</td>
-                        <td style="text-align: right;">{{ order.average_price }}</td>
-                        <td style="text-align: right; color: yellow;">{{ order.current_price }}</td>
-                        <td style="text-align: right; color:
-                            {% if order.profit_pct > 3 %}
-                                rgb(0, 255, 0);
-                            {% elif order.profit_pct > 2 %}
-                                rgb(0, 225, 0);
-                            {% elif order.profit_pct > 1 %}
-                                rgb(0, 195, 0);
-                            {% elif order.profit_pct > 0 %}
-                                rgb(0, 165, 0);
-                            {% elif order.profit_pct < -3 %}
-                                rgb(255, 0, 0);
-                            {% elif order.profit_pct < -2 %}
-                                rgb(225, 0, 0);
-                            {% elif order.profit_pct < -1 %}
-                                rgb(195, 0, 0);
-                            {% elif order.profit_pct < 0 %}
-                                rgb(165, 0, 0);
-                            {% else %}
-                                inherit;
-                            {% endif %}">
-                            {% if order.profit_pct > 0 %}
-                                {{ order.profit_pct }}%&nbsp;&nbsp;&nbsp;🔥
-                            {% elif order.profit_pct < 0 %}
-                                {{ order.profit_pct }}%&nbsp;&nbsp;&nbsp;🙀
-                            {% else %}
-                                {{ order.profit_pct }}%&nbsp;&nbsp;&nbsp;😐
-                            {% endif %}
-                        </td>
-                        <td style="text-align: right;">{{ order.recommended_stop_loss }}</td>
-                        <td style="text-align: right;">{{ order.stop_loss_price }}</td>
-                        <td style="text-align: right; background-color: {{ 'red' if order.needs_adjusting }}; ">{{ order.stop_loss_distance_pct }}%</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <p>No filled orders found.</p>
-    {% endif %}
+    <table>
+        <thead>
+            <tr>
+                <th style="text-align: center;width: 9%;">Ticker</th>
+                <th style="text-align: center;width: 19%;">Name</th>
+                <th style="text-align: center;width: 9%;">Quantity</th>
+                <th style="text-align: center;width: 9%;">Currency</th>
+                <th style="text-align: center;width: 10%;">Current Price</th>
+                <th style="text-align: center;width: 10%;">Purchased Price</th>
+                <th style="text-align: center;width: 9%;;">Current P/L %</th>
+                <th style="text-align: center;width: 14%;">Recommended Stop-Loss</th>
+                <th style="text-align: center;width: 11%;">Current Stop-Loss</th>
+            </tr>
+        </thead>
+        <tbody id="positions">
+            <tr><td colspan="10">Loading...</td></tr>
+        </tbody>
+    </table>
+    <div id="last-updated" style="text-align: center; font-size: 14px;">Last updated: --</div>
+
+    <script>
+    let previousData = {};
+    async function fetchData() {
+        try {
+            const res = await fetch('/data');
+            if (!res.ok) throw new Error("HTTP error " + res.status);
+            const data = await res.json();
+            const now = new Date();
+            document.getElementById("last-updated").textContent = "Last updated: " + now.toLocaleTimeString();
+            const tbody = document.getElementById("positions");
+            tbody.innerHTML = "";
+
+            data.forEach(order => {
+                // pick color for profit_pct
+                let profitColor = "inherit";
+                if (order.profit_pct > 3) profitColor = "rgb(0, 255, 0)";
+                else if (order.profit_pct > 2) profitColor = "rgb(0, 225, 0)";
+                else if (order.profit_pct > 1) profitColor = "rgb(0, 195, 0)";
+                else if (order.profit_pct > 0) profitColor = "rgb(0, 165, 0)";
+                else if (order.profit_pct < -3) profitColor = "rgb(255, 0, 0)";
+                else if (order.profit_pct < -2) profitColor = "rgb(225, 0, 0)";
+                else if (order.profit_pct < -1) profitColor = "rgb(195, 0, 0)";
+                else if (order.profit_pct < 0) profitColor = "rgb(165, 0, 0)";
+
+                let profitText = `${order.profit_pct}%&nbsp;&nbsp;&nbsp;😐`;
+                if (order.profit_pct > 0) profitText = `${order.profit_pct}%&nbsp;&nbsp;&nbsp;🔥`;
+                else if (order.profit_pct < 0) profitText = `${order.profit_pct}%&nbsp;&nbsp;&nbsp;🙀`;
+
+                let stopLossBg = order.needs_adjusting ? "red" : "inherit";
+
+                const tr = document.createElement("tr");
+
+                let priceColor = "yellow";
+                const prevPrice = previousData[order.ticker]?.current_price;
+                if (prevPrice !== undefined) {
+                    if (order.current_price > prevPrice) priceColor = "lime";
+                    else if (order.current_price < prevPrice) priceColor = "red";
+                }
+
+                tr.innerHTML = `
+                    <td><strong>${order.ticker}</strong></td>
+                    <td><strong>${order.name}</strong></td>
+                    <td style="text-align: right;">${order.quantity}</td>
+                    <td style="text-align: center; font-size: 32px; padding: 0px;">${order.currency}</td>
+                    <td style="text-align: right; color: ${priceColor};">${order.current_price}</td>
+                    <td style="text-align: right;">${order.average_price}</td>
+                    <td style="text-align: right; color: ${profitColor};">${profitText}</td>
+                    <td style="text-align: center; background-color: ${stopLossBg};">⛔️&nbsp;&nbsp;${order.recommended_stop_loss} (${order.recommended_stop_loss_pct}%)</td>
+                    <td style="text-align: center; background-color: ${stopLossBg};">🙈&nbsp;&nbsp;${order.stop_loss_price} (${order.stop_loss_distance_pct}%)</td>
+                `;
+                tbody.appendChild(tr);
+
+                if (priceColor) {
+                    setTimeout(() => {
+                        tr.cells[5].style.color = "yellow";
+                    }, 600);
+                }
+                previousData[order.ticker] = { current_price: order.current_price };
+            });
+        } catch (err) {
+            console.error("Fetch error:", err);
+        }
+    }
+    setInterval(fetchData, 20000);
+    fetchData();
+    </script>
 </body>
 </html>

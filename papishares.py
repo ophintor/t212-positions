@@ -25,9 +25,12 @@ TICKERS = {
     "CAPA_US_EQ": "Quantum-Si",
     "CRDO_US_EQ": "Credo",
     "DMYI_US_EQ": "IonQ",
+    "GIG_US_EQ": "BigBear.ai",
     "GOOGL_US_EQ": "Alphabet",
     "INTC_US_EQ": "Intel",
+    "LAES_US_EQ": "SEALSQ",
     "LLOYl_EQ": "Lloyds",
+    "MBX_US_EQ": "MBX Biosciences",
     "MU_US_EQ": "Micron",
     "NET_US_EQ": "Cloudflare",
     "PHNXl_EQ": "Phoenix",
@@ -41,8 +44,24 @@ TICKERS = {
     "VALE_US_EQ": "Vale",
     "WIX_US_EQ": "Wix",
     "WREEl_EQ": "WT Rare Metals",
+    "WRENl_EQ": "WT Renewables",
     "XPOA_US_EQ": "D-Wave",
     "XXII_US_EQ": "22nd Century",
+    "IPOE_US_EQ": "SoFi",
+    "GDWNl_EQ": "Goodwin",
+}
+
+NON_STANDARD_STOPS = {
+    "DMYI_US_EQ": 8,    # IonQ - volatile
+    "QWTMl_EQ": 8,      # WT Quantum Computing - volatile
+    "RRl_EQ": 5,        # Rolls Royce - cyclical
+    "SEMIl_EQ": 5,      # iShares Semiconductors - volatile
+    "STX_US_EQ": 5,     # Seagate - cyclical
+    "WREEl_EQ": 6,      # WT Rare Metals - volatile
+    "WRENl_EQ": 6,      # WT Renewables - volatile
+    "XPOA_US_EQ": 8,    # D-Wave - volatile
+    "IPOE_US_EQ": 6,    # SoFi - volatile
+    "GDWNl_EQ": 6,      # Goodwin - volatile
 }
 
 def fetch_positions():
@@ -140,6 +159,11 @@ def get_stop_losses(exceptions=[], default_target_stop_pct = 3):
         else:
             name = pos["ticker"]
 
+        if pos["ticker"] in NON_STANDARD_STOPS:
+            ticker_position["recommended_stop_loss_pct"] = NON_STANDARD_STOPS[pos["ticker"]]
+        else:
+            ticker_position["recommended_stop_loss_pct"] = default_target_stop_pct
+
         ticker_position["ticker"] = pos["ticker"].split("_")[0]
         country = pos["ticker"].split("_")[1]
         if country == "US":
@@ -152,8 +176,8 @@ def get_stop_losses(exceptions=[], default_target_stop_pct = 3):
         ticker_position["current_price"] = get_price(pos["ticker"])
         ticker_position["profit_pct"] = round(((ticker_position["current_price"] - pos["averagePrice"]) / pos["averagePrice"]) * 100, 2)
         ticker_position["tolerance"] = 1  # percent
-        # ticker_position["stop_distance_pct"] = default_target_stop_pct + int(ticker_position["profit_pct"] / 10)
-        ticker_position["recommended_stop_loss"] = round(ticker_position["current_price"] * (1 - default_target_stop_pct / 100), 2)
+        # ticker_position["stop_distance_pct"] = ticker_position["recommended_stop_loss_pct"] + int(ticker_position["profit_pct"] / 10)
+        ticker_position["recommended_stop_loss"] = round(ticker_position["current_price"] * (1 - ticker_position["recommended_stop_loss_pct"] / 100), 2)
 
 
         # Existing stop (if any)
@@ -168,7 +192,7 @@ def get_stop_losses(exceptions=[], default_target_stop_pct = 3):
         else:
             ticker_position["stop_loss_distance_pct"] = None
 
-        if ticker_position["stop_loss_price"] is None or (ticker_position["stop_loss_distance_pct"] - default_target_stop_pct) >= ticker_position["tolerance"]:
+        if ticker_position["stop_loss_price"] is None or (ticker_position["stop_loss_distance_pct"] - ticker_position["recommended_stop_loss_pct"]) >= ticker_position["tolerance"] or ticker_position["stop_loss_distance_pct"] < 0:
             ticker_position["needs_adjusting"] = True
         else:
             ticker_position["needs_adjusting"] = False

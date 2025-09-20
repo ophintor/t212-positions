@@ -5,7 +5,7 @@ namespace: papishares
 image:
   repository: ophintor/papishares
   tag: "latest"
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 service:
   type: ClusterIP
