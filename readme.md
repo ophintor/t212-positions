@@ -32,10 +32,11 @@ helm upgrade --install \
 Containing something like:
 
 ```
-# Tarding 212
+# Trading 212
 API_BASE="https://live.trading212.com/api/v0/equity"
 API_KEY="<your trading 212 API key>"
-# Only for Telegram
+
+# Telegram (optional)
 BOT_TOKEN="999999999:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 CHAT_ID="222222222"
 ```
