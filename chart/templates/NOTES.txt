@@ -1,0 +1,15 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }}.
+
+To check the status:
+  kubectl get deploy -l app={{ include "papishares.fullname" . }} -n papishares
+
+To forward port locally (for dev):
+  kubectl port-forward deploy/{{ include "papishares.fullname" . }} 5000:{{ .Values.containerPort }} -n papishares
+
+If you used the included secret template, remember to update it with real values:
+  kubectl get secret {{ .Values.secrets.name }} -o yaml -n papishares
+
+To uninstall:
+  helm uninstall {{ .Release.Name }} -n papishares

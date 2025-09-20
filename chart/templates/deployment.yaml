@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "papishares.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{ include "papishares.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "papishares.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "papishares.fullname" . }}
+      annotations: {{ toYaml .Values.podAnnotations | nindent 8 }}
+    spec:
+      containers:
+        - name: papishares
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.containerPort }}
+          {{- if .Values.probes.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.path }}
+              port: {{ .Values.containerPort }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.path }}
+              port: {{ .Values.containerPort }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          {{- end }}
+          {{- if .Values.resources }}
+          resources:
+            {{ toYaml .Values.resources | nindent 12 }}
+          {{- end }}
+          {{- if .Values.secrets.enabled }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.name }}
+          {{- end }}
+          env:
+            {{- range .Values.extraEnv }}
+            - name: {{ .name }}
+              value: {{ quote .value }}
+            {{- end }}
