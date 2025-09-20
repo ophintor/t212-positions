@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta http-equiv="refresh" content="1">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order History</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Helvetica', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #121212;
+            color: #e0e0e0;
+            line-height: 1.6;
+            font-size: 16px; /* Increased font size */
+        }
+
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+            color: #ffffff;
+            font-size: 32px; /* Increased font size */
+        }
+
+        table {
+            width: 90%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+            background-color: #1e1e1e;
+            font-size: 15px; /* Increased font size */
+        }
+
+        th, td {
+            border: 1px solid #333;
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #007BFF;
+            color: white;
+            text-transform: uppercase;
+            font-size: 16px;
+        }
+
+        tr:nth-child(even) {
+            background-color: #2a2a2a;
+        }
+
+        tr:hover {
+            background-color: #333333;
+        }
+
+        td {
+            font-size: 16px;
+        }
+
+        td:nth-child(6) {
+            font-weight: bold;
+        }
+
+        td:last-child {
+            text-align: center;
+        }
+
+        p {
+            text-align: center;
+            font-size: 16px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <h1>Current Positions</h1>
+    {% if orders %}
+        <table>
+            <thead>
+                <tr>
+                    <th style="text-align: center;">Ticker</th>
+                    <th style="text-align: center;">Name</th>
+                    <th style="text-align: center;">Quantity</th>
+                    <th style="text-align: center;">Currency</th>
+                    <th style="text-align: center;width: 10%;">Purchased Price</th>
+                    <th style="text-align: center;width: 10%;">Current Price</th>
+                    <th style="text-align: center;width: 10%;;">Current P/L %</th>
+                    <th style="text-align: center;width: 10%;">Recommended Stop-Loss</th>
+                    <th style="text-align: center;width: 10%;">Current Stop-Loss Price</th>
+                    <th style="text-align: center;width: 10%;">Current Stop-Loss Distance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                    <tr>
+                        <td><strong>{{ order.ticker }}</strong></td>
+                        <td><strong>{{ order.name }}</strong></td>
+                        <td style="text-align: right;">{{ order.quantity }}</td>
+                        <td style="text-align: center; font-size: 32px; padding: 0px;">{{ order.currency }}</td>
+                        <td style="text-align: right;">{{ order.average_price }}</td>
+                        <td style="text-align: right; color: yellow;">{{ order.current_price }}</td>
+                        <td style="text-align: right; color:
+                            {% if order.profit_pct > 3 %}
+                                rgb(0, 255, 0);
+                            {% elif order.profit_pct > 2 %}
+                                rgb(0, 225, 0);
+                            {% elif order.profit_pct > 1 %}
+                                rgb(0, 195, 0);
+                            {% elif order.profit_pct > 0 %}
+                                rgb(0, 165, 0);
+                            {% elif order.profit_pct < -3 %}
+                                rgb(255, 0, 0);
+                            {% elif order.profit_pct < -2 %}
+                                rgb(225, 0, 0);
+                            {% elif order.profit_pct < -1 %}
+                                rgb(195, 0, 0);
+                            {% elif order.profit_pct < 0 %}
+                                rgb(165, 0, 0);
+                            {% else %}
+                                inherit;
+                            {% endif %}">
+                            {% if order.profit_pct > 0 %}
+                                {{ order.profit_pct }}%&nbsp;&nbsp;&nbsp;🔥
+                            {% elif order.profit_pct < 0 %}
+                                {{ order.profit_pct }}%&nbsp;&nbsp;&nbsp;🙀
+                            {% else %}
+                                {{ order.profit_pct }}%&nbsp;&nbsp;&nbsp;😐
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right;">{{ order.recommended_stop_loss }}</td>
+                        <td style="text-align: right;">{{ order.stop_loss_price }}</td>
+                        <td style="text-align: right; background-color: {{ 'red' if order.needs_adjusting }}; ">{{ order.stop_loss_distance_pct }}%</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No filled orders found.</p>
+    {% endif %}
+</body>
+</html>
