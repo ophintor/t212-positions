@@ -4,6 +4,8 @@ get some inspiration out of it. It just lists my current open positions in
 Trading 212 in a webpage. It mainly helps me visualise my stop losses, so I can
 keep them at a safe distance.
 
+![Papishares](img/papishares.png)
+
 ## Build the docker image
 
 ```
