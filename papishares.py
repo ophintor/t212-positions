@@ -7,6 +7,9 @@ load_dotenv()
 
 API_BASE = os.getenv("API_BASE")
 API_KEY = os.getenv("API_KEY")
+BOT_TOKEN =os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+TELEGRAM_URL = os.getenv("TELEGRAM_URL")
 
 HEADERS = {
     "Content-Type": "application/json",
@@ -86,6 +89,8 @@ def update_stop_order(ticker: str, quantity: float, stop_price: float):
     return resp.json()
 
 def send_telegram_message(message):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
     payload = {
         "chat_id": CHAT_ID,
         "text": message,
