@@ -2,6 +2,7 @@ import requests, time
 from pprint import pprint
 from dotenv import load_dotenv
 import os
+import sqlite3
 
 load_dotenv()
 
@@ -23,46 +24,88 @@ TICKERS = {
     "APP_US_EQ": "AppLovin",
     "AVl_EQ": "Aviva",
     "CAPA_US_EQ": "Quantum-Si",
+    "COFFl_EQ": "WT Coffee",
     "CRDO_US_EQ": "Credo",
     "DMYI_US_EQ": "IonQ",
+    "GDWNl_EQ": "Goodwin",
     "GIG_US_EQ": "BigBear.ai",
     "GOOGL_US_EQ": "Alphabet",
+    "IBM_US_EQ": "IBM",
     "INTC_US_EQ": "Intel",
+    "IPOE_US_EQ": "SoFi",
     "LAES_US_EQ": "SEALSQ",
     "LLOYl_EQ": "Lloyds",
+    "LPL_US_EQ": "LG Displays",
     "MBX_US_EQ": "MBX Biosciences",
     "MU_US_EQ": "Micron",
     "NET_US_EQ": "Cloudflare",
+    "NIO_US_EQ": "NIO",
     "PHNXl_EQ": "Phoenix",
     "QQQ3l_EQ": "NASDAQ-100 3x",
     "QWTMl_EQ": "WT Quantum Computing",
+    "RR_US_EQ": "Richtech Robotics",
     "RRl_EQ": "Rolls Royce",
     "SEMIl_EQ": "iShares Semiconductors",
     "SNII_US_EQ": "Rigetti",
     "SPIl_EQ": "Spire Health",
+    "SSLNl_EQ": "iShares Silver",
     "STX_US_EQ": "Seagate",
     "VALE_US_EQ": "Vale",
     "WIX_US_EQ": "Wix",
     "WREEl_EQ": "WT Rare Metals",
     "WRENl_EQ": "WT Renewables",
     "XPOA_US_EQ": "D-Wave",
-    "XXII_US_EQ": "22nd Century",
-    "IPOE_US_EQ": "SoFi",
-    "GDWNl_EQ": "Goodwin",
 }
 
 NON_STANDARD_STOPS = {
     "DMYI_US_EQ": 8,    # IonQ - volatile
     "QWTMl_EQ": 8,      # WT Quantum Computing - volatile
-    "RRl_EQ": 5,        # Rolls Royce - cyclical
-    "SEMIl_EQ": 5,      # iShares Semiconductors - volatile
-    "STX_US_EQ": 5,     # Seagate - cyclical
     "WREEl_EQ": 6,      # WT Rare Metals - volatile
     "WRENl_EQ": 6,      # WT Renewables - volatile
     "XPOA_US_EQ": 8,    # D-Wave - volatile
     "IPOE_US_EQ": 6,    # SoFi - volatile
     "GDWNl_EQ": 6,      # Goodwin - volatile
 }
+
+def initialize_database(db):
+    print("Initializing database...")
+    conn = sqlite3.connect(db)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS positions (
+            ticker TEXT PRIMARY KEY,
+            stop_loss REAL,
+            last_price REAL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def get_db(db):
+    conn = sqlite3.connect(db)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def update_stop_loss(ticker, current_price, db, trail_percent):
+    conn = get_db(db)
+    c = conn.cursor()
+
+    c.execute("SELECT stop_loss FROM positions WHERE ticker=?", (ticker,))
+    row = c.fetchone()
+
+    suggested_stop_loss = round(current_price * (1 - trail_percent / 100), 2)
+
+    if row is None:
+        stop_loss = suggested_stop_loss
+        c.execute("INSERT INTO positions (ticker, stop_loss, last_price) VALUES (?, ?, ?)",
+                  (ticker, stop_loss, current_price))
+    else:
+        stop_loss = max(row["stop_loss"], suggested_stop_loss)
+        c.execute("UPDATE positions SET stop_loss=?, last_price=? WHERE ticker=?",
+                  (stop_loss, current_price, ticker))
+
+    conn.commit()
+    conn.close()
+    return stop_loss
 
 def fetch_positions():
     """Fetch all current equity positions"""
@@ -146,13 +189,13 @@ def report_price_moves():
 
         time.sleep(1)  # To avoid hitting rate limits
 
-def get_stop_losses(exceptions=[], default_target_stop_pct = 3):
-    all_stop_losses = []
+def get_current_positions(db, default_target_stop_pct = 2):
+    all_positions = []
     positions = fetch_positions()
     stop_orders = [o for o in fetch_orders() if o.get("type") in ["STOP", "STOP_LIMIT"]]
 
     for pos in positions:
-        ticker_position = {}
+        position_dict = {}
 
         if pos["ticker"] in TICKERS:
             name = TICKERS[pos["ticker"]]
@@ -160,44 +203,70 @@ def get_stop_losses(exceptions=[], default_target_stop_pct = 3):
             name = pos["ticker"]
 
         if pos["ticker"] in NON_STANDARD_STOPS:
-            ticker_position["recommended_stop_loss_pct"] = NON_STANDARD_STOPS[pos["ticker"]]
+            position_dict["recommended_stop_loss_pct"] = NON_STANDARD_STOPS[pos["ticker"]]
         else:
-            ticker_position["recommended_stop_loss_pct"] = default_target_stop_pct
+            position_dict["recommended_stop_loss_pct"] = default_target_stop_pct
 
-        ticker_position["ticker"] = pos["ticker"].split("_")[0]
+        position_dict["ticker"] = pos["ticker"].split("_")[0]
         country = pos["ticker"].split("_")[1]
         if country == "US":
-            ticker_position["currency"] = "💵"
+            position_dict["currency"] = "💵"
         else:
-            ticker_position["currency"] = "💷"
-        ticker_position["name"] = name
-        ticker_position["quantity"] = pos["quantity"]
-        ticker_position["average_price"] = pos["averagePrice"]
-        ticker_position["current_price"] = get_price(pos["ticker"])
-        ticker_position["profit_pct"] = round(((ticker_position["current_price"] - pos["averagePrice"]) / pos["averagePrice"]) * 100, 2)
-        ticker_position["tolerance"] = 1  # percent
-        # ticker_position["stop_distance_pct"] = ticker_position["recommended_stop_loss_pct"] + int(ticker_position["profit_pct"] / 10)
-        ticker_position["recommended_stop_loss"] = round(ticker_position["current_price"] * (1 - ticker_position["recommended_stop_loss_pct"] / 100), 2)
-
+            position_dict["currency"] = "💷"
+        position_dict["name"] = name
+        position_dict["quantity"] = pos["quantity"]
+        position_dict["average_price"] = round(pos["averagePrice"], 2)
+        position_dict["current_price"] = get_price(pos["ticker"])
+        position_dict["profit_pct"] = round(((position_dict["current_price"] - pos["averagePrice"]) / pos["averagePrice"]) * 100, 2)
+        position_dict["tolerance"] = 1  # percent
 
         # Existing stop (if any)
-        # TODO check qty matches position
         stop_order = next((o for o in stop_orders if o.get("ticker") == pos["ticker"]), None)
-        ticker_position["stop_loss_price"] = float(stop_order["stopPrice"]) if stop_order is not None else None
-        ticker_position["stop_quantity"] = float(stop_order["quantity"]) if stop_order is not None else None
+        position_dict["stop_loss_price"] = float(stop_order["stopPrice"]) if stop_order is not None else 0
+        position_dict["stop_loss_quantity"] = float(abs(stop_order["quantity"])) if stop_order is not None else 0
+        position_dict["recommended_stop_loss"] = update_stop_loss(position_dict["ticker"], position_dict["current_price"], db, position_dict["recommended_stop_loss_pct"])
 
         # Actual distance from current price
-        if ticker_position["stop_loss_price"] is not None:
-            ticker_position["stop_loss_distance_pct"] = round(((ticker_position["current_price"] - ticker_position["stop_loss_price"]) / ticker_position["current_price"]) * 100, 2)
+        if position_dict["stop_loss_price"] is not None:
+            position_dict["stop_loss_distance_pct"] = round(((position_dict["current_price"] - position_dict["stop_loss_price"]) / position_dict["current_price"]) * 100, 2)
         else:
-            ticker_position["stop_loss_distance_pct"] = None
+            position_dict["stop_loss_distance_pct"] = None
 
-        if ticker_position["stop_loss_price"] is None or (ticker_position["stop_loss_distance_pct"] - ticker_position["recommended_stop_loss_pct"]) >= ticker_position["tolerance"] or ticker_position["stop_loss_distance_pct"] < 0:
-            ticker_position["needs_adjusting"] = True
+        if position_dict["stop_loss_price"] is None \
+            or position_dict["quantity"] > position_dict["stop_loss_quantity"] \
+            or (position_dict["stop_loss_distance_pct"] - position_dict["recommended_stop_loss_pct"]) >= position_dict["tolerance"] \
+            or position_dict["stop_loss_distance_pct"] < 0:
+            position_dict["needs_adjusting"] = True
         else:
-            ticker_position["needs_adjusting"] = False
+            position_dict["needs_adjusting"] = False
 
         time.sleep(1)  # To avoid hitting rate limits
-        all_stop_losses.append(ticker_position)
+        all_positions.append(position_dict)
 
-    return all_stop_losses
+    return all_positions
+
+
+def get_pending_orders():
+    orders = []
+    pending_orders = [o for o in fetch_orders() if o.get("type") in ["LIMIT", "MARKET"]]
+    for order in pending_orders:
+        order_dict = {}
+
+        if order["ticker"] in TICKERS:
+            name = TICKERS[order["ticker"]]
+        else:
+            name = order["ticker"]
+
+        order_dict["name"] = name
+        order_dict["ticker"] = order["ticker"].split("_")[0]
+        country = order["ticker"].split("_")[1]
+        if country == "US":
+            order_dict["currency"] = "💵"
+        else:
+            order_dict["currency"] = "💷"
+        order_dict["limit_proce"] = round(order["limitPrice"], 2)
+        order_dict["quantity"] = order["quantity"]
+
+    time.sleep(1)  # To avoid hitting rate limits
+    orders.append(order_dict)
+    return orders

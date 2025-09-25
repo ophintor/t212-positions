@@ -1,16 +1,24 @@
+import sqlite3
 from flask import Flask, render_template, jsonify
 import papishares
 
 app = Flask(__name__)
+db = 'positions.db'
+papishares.initialize_database(db)
 
-@app.route('/data')
-def get_data():
-    orders = papishares.get_stop_losses()
-    return sorted(orders, key=lambda order: order['profit_pct'], reverse=True)
+@app.route('/positions')
+def get_positions():
+    positions = papishares.get_current_positions(db)
+    return sorted(positions, key=lambda order: order['profit_pct'], reverse=True)
+
+@app.route('/orders')
+def get_orders():
+    orders = papishares.get_pending_orders()
+    return orders
 
 @app.route('/')
 def index():
-    return render_template('orders.html')
+    return render_template('positions.html')
 
 @app.route("/healthz")
 def healthz():
