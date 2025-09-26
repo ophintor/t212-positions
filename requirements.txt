@@ -1,6 +1,10 @@
-requests
 colorama
-pytest
 Flask
-tabulate
+html5lib
+pandas
+pytest
 python-dotenv
+requests
+tabulate
+yfinance
+scipy

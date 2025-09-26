@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Market Potential Entries</title>
+    <style>
+        body {
+            font-family: 'Helvetica', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #121212;
+            color: #e0e0e0;
+            line-height: 1.6;
+            font-size: 16px;
+        }
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+            color: #ffffff;
+            font-size: 32px;
+        }
+        h2,h3 {
+            text-align: center;
+        }
+        table {
+            width: 65%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+            background-color: #1e1e1e;
+            font-size: 15px;
+        }
+
+        table#orders-table {
+            width: 50%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+            background-color: #1e1e1e;
+            font-size: 15px;
+        }
+        th, td {
+            border: 1px solid #333;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #007BFF;
+            color: white;
+            text-transform: uppercase;
+            text-align: center;
+            font-size: 16px;
+        }
+        tr:nth-child(even) { background-color: #2a2a2a; }
+        tr:hover { background-color: #333333; }
+        td { font-size: 16px; }
+        td:nth-child(6) { font-weight: bold; }
+        td:last-child { text-align: center; }
+        p {
+            text-align: center;
+            font-size: 16px;
+            color: #999;
+        }
+        .mono {
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        .subtle-link {
+            color: #bbb;
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+        }
+
+        .subtle-link:hover {
+            color: #ddff00;
+            border-bottom: 1px solid #ddff00;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐢 Stock Market Potential Entries (risk={{ risk }})</h1>
+
+    <p><strong>Generated on:</strong> {{ data.generated_on if data.generated_on is defined else 'Not available' }}</p>
+    <p>[ <a class="subtle-link" href="/">Check current positions</a> ]</p>
+
+    {% if data.indices is defined %}
+        {% for index_key, index_data in data.indices.items() %}
+        <h2>{{ index_data.name }}</h2>
+
+        {% for section_key, section_data in index_data.sections.items() %}
+            <h3>📈 {{ section_data.title }}</h3>
+
+            {% if section_data.data %}
+                <table border="1">
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Price</th>
+                            <th>ATR (20)</th>
+                            <th>ATR %</th>
+                            <th>3 Months Change</th>
+                            <th>P/E</th>
+                            <th>Position (shares)</th>
+                            <th>Position (amount)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in section_data.data %}
+                            <tr>
+                                <td class="mono" style="text-align: left; width: 16%;">{{ item.ticker }}</td>
+                                <td class="mono" style="text-align: right; width: 12%;">
+                                    {{ "USD" if index_key == "SP500" else "GBP" }}
+                                    {{ item.price }}
+                                </td>
+                                <td class="mono" style="text-align: right; width: 12%;">{{ item.atr }}</td>
+                                <td class="mono" style="text-align: right; width: 12%;">{{ item.atr_percent }}%</td>
+                                <td class="mono" style="text-align: right; width: 12%;">{{ item.profit_percent }}%</td>
+                                <td class="mono" style="text-align: right; width: 10%;">{{ item.pe }}</td>
+                                <td class="mono" style="text-align: right; width: 13%;">
+                                    {{ (risk / item.atr)|int if item.atr and item.atr > 0 else "N/A" }}
+                                </td>
+                                <td class="mono" style="text-align: right; width: 13%;">
+                                    {{ "USD" if index_key == "SP500" else "GBP" }}
+                                    {{ "%.2f"|format((risk / item.atr) * item.price) if item.atr and item.atr > 0 else "N/A" }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No data available for this section.</p>
+            {% endif %}
+
+            <br>
+        {% endfor %}
+        {% endfor %}
+    {% else %}
+        <p><strong>Error:</strong> No 'indices' data found. Available data:</p>
+        <pre>{{ data }}</pre>
+    {% endif %}
+</body>
+</html>

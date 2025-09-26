@@ -3,6 +3,7 @@ from pprint import pprint
 from dotenv import load_dotenv
 import os
 import sqlite3
+import json
 
 load_dotenv()
 
@@ -18,54 +19,6 @@ HEADERS = {
 }
 
 current_prices = {}
-
-TICKERS = {
-    "AMD_US_EQ": "AMD",
-    "APP_US_EQ": "AppLovin",
-    "AVl_EQ": "Aviva",
-    "CAPA_US_EQ": "Quantum-Si",
-    "COFFl_EQ": "WT Coffee",
-    "CRDO_US_EQ": "Credo",
-    "DMYI_US_EQ": "IonQ",
-    "GDWNl_EQ": "Goodwin",
-    "GIG_US_EQ": "BigBear.ai",
-    "GOOGL_US_EQ": "Alphabet",
-    "IBM_US_EQ": "IBM",
-    "INTC_US_EQ": "Intel",
-    "IPOE_US_EQ": "SoFi",
-    "LAES_US_EQ": "SEALSQ",
-    "LLOYl_EQ": "Lloyds",
-    "LPL_US_EQ": "LG Displays",
-    "MBX_US_EQ": "MBX Biosciences",
-    "MU_US_EQ": "Micron",
-    "NET_US_EQ": "Cloudflare",
-    "NIO_US_EQ": "NIO",
-    "PHNXl_EQ": "Phoenix",
-    "QQQ3l_EQ": "NASDAQ-100 3x",
-    "QWTMl_EQ": "WT Quantum Computing",
-    "RR_US_EQ": "Richtech Robotics",
-    "RRl_EQ": "Rolls Royce",
-    "SEMIl_EQ": "iShares Semiconductors",
-    "SNII_US_EQ": "Rigetti",
-    "SPIl_EQ": "Spire Health",
-    "SSLNl_EQ": "iShares Silver",
-    "STX_US_EQ": "Seagate",
-    "VALE_US_EQ": "Vale",
-    "WIX_US_EQ": "Wix",
-    "WREEl_EQ": "WT Rare Metals",
-    "WRENl_EQ": "WT Renewables",
-    "XPOA_US_EQ": "D-Wave",
-}
-
-NON_STANDARD_STOPS = {
-    "DMYI_US_EQ": 8,    # IonQ - volatile
-    "QWTMl_EQ": 8,      # WT Quantum Computing - volatile
-    "WREEl_EQ": 6,      # WT Rare Metals - volatile
-    "WRENl_EQ": 6,      # WT Renewables - volatile
-    "XPOA_US_EQ": 8,    # D-Wave - volatile
-    "IPOE_US_EQ": 6,    # SoFi - volatile
-    "GDWNl_EQ": 6,      # Goodwin - volatile
-}
 
 def initialize_database(db):
     print("Initializing database...")
@@ -107,6 +60,12 @@ def update_stop_loss(ticker, current_price, db, trail_percent):
     conn.close()
     return stop_loss
 
+def fetch_all_tickers_info():
+    url = f"{API_BASE}/metadata/instruments"
+    resp = requests.get(url, headers=HEADERS)
+    resp.raise_for_status()
+    return resp.json()
+
 def fetch_positions():
     """Fetch all current equity positions"""
     url = f"{API_BASE}/portfolio"
@@ -136,60 +95,60 @@ def get_price(ticker: str):
     resp.raise_for_status()
     return resp.json()["currentPrice"]
 
-def update_stop_order(ticker: str, quantity: float, stop_price: float):
-    """Place a stop order at the given stop price"""
-    url = f"{API_BASE}/orders/stop"
-    payload = {
-        "ticker": ticker,
-        "quantity": quantity,
-        "stopPrice": stop_price,
-        "timeValidity": "DAY"
-    }
-    print(url, payload, HEADERS)
-    resp = requests.post(url, headers=HEADERS, json=payload)
-    resp.raise_for_status()
-    return resp.json()
+# def update_stop_order(ticker: str, quantity: float, stop_price: float):
+#     """Place a stop order at the given stop price"""
+#     url = f"{API_BASE}/orders/stop"
+#     payload = {
+#         "ticker": ticker,
+#         "quantity": quantity,
+#         "stopPrice": stop_price,
+#         "timeValidity": "DAY"
+#     }
+#     print(url, payload, HEADERS)
+#     resp = requests.post(url, headers=HEADERS, json=payload)
+#     resp.raise_for_status()
+#     return resp.json()
 
-def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+# def send_telegram_message(message):
+#     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message,
-        "parse_mode": "HTML"
-    }
+#     payload = {
+#         "chat_id": CHAT_ID,
+#         "text": message,
+#         "parse_mode": "HTML"
+#     }
 
-    response = requests.post(url, data=payload)
+#     response = requests.post(url, data=payload)
 
-    if response.status_code == 200:
-        print("Message sent successfully!")
-    else:
-        print("Failed to send message:", response.text)
+#     if response.status_code == 200:
+#         print("Message sent successfully!")
+#     else:
+#         print("Failed to send message:", response.text)
 
-def report_price_moves():
-    positions = fetch_positions()
-    for pos in positions:
-        if pos["ticker"] in TICKERS:
-            ticker = TICKERS[pos["ticker"]]
-        else:
-            ticker = pos["ticker"]
+# def report_price_moves():
+#     positions = fetch_positions()
+#     for pos in positions:
+#         if pos["ticker"] in T212_PSEUDOTICKERS:
+#             ticker = T212_PSEUDOTICKERS[pos["ticker"]]
+#         else:
+#             ticker = pos["ticker"]
 
-        if pos["ticker"] in current_prices:
-            old_price = current_prices[pos["ticker"]]
-        else:
-            old_price = None
-        current_prices[pos["ticker"]] = get_price(pos["ticker"])
-        if old_price is not None and current_prices[pos["ticker"]] != old_price:
-            percentage_change = ((current_prices[pos["ticker"]] - old_price) / old_price) * 100
-            if abs(percentage_change) >= 0.5:
-                padding = " " * (15 - len(ticker))
-                message = f"Price change for {ticker}: {padding} {old_price} -> {current_prices[pos['ticker']]}\t ({percentage_change:.2f}%)"
-                print(message)
-                send_telegram_message(f"<code>{message}</code>")
+#         if pos["ticker"] in current_prices:
+#             old_price = current_prices[pos["ticker"]]
+#         else:
+#             old_price = None
+#         current_prices[pos["ticker"]] = get_price(pos["ticker"])
+#         if old_price is not None and current_prices[pos["ticker"]] != old_price:
+#             percentage_change = ((current_prices[pos["ticker"]] - old_price) / old_price) * 100
+#             if abs(percentage_change) >= 0.5:
+#                 padding = " " * (15 - len(ticker))
+#                 message = f"Price change for {ticker}: {padding} {old_price} -> {current_prices[pos['ticker']]}\t ({percentage_change:.2f}%)"
+#                 print(message)
+#                 send_telegram_message(f"<code>{message}</code>")
 
-        time.sleep(1)  # To avoid hitting rate limits
+#         time.sleep(1)  # To avoid hitting rate limits
 
-def get_current_positions(db, default_target_stop_pct = 2):
+def get_current_positions(db, all_tickers, default_target_stop_pct = 2):
     all_positions = []
     positions = fetch_positions()
     stop_orders = [o for o in fetch_orders() if o.get("type") in ["STOP", "STOP_LIMIT"]]
@@ -197,34 +156,32 @@ def get_current_positions(db, default_target_stop_pct = 2):
     for pos in positions:
         position_dict = {}
 
-        if pos["ticker"] in TICKERS:
-            name = TICKERS[pos["ticker"]]
-        else:
-            name = pos["ticker"]
+        ticker_info = next((item for item in all_tickers if item['ticker'] == pos['ticker']), None)
 
-        if pos["ticker"] in NON_STANDARD_STOPS:
-            position_dict["recommended_stop_loss_pct"] = NON_STANDARD_STOPS[pos["ticker"]]
-        else:
-            position_dict["recommended_stop_loss_pct"] = default_target_stop_pct
+        position_dict["ticker"] = ticker_info['ticker']
+        position_dict["short_name"] = ticker_info['shortName']
+        position_dict["name"] = ticker_info['name']
 
-        position_dict["ticker"] = pos["ticker"].split("_")[0]
-        country = pos["ticker"].split("_")[1]
-        if country == "US":
+        if ticker_info["currencyCode"] == "US":
             position_dict["currency"] = "💵"
         else:
             position_dict["currency"] = "💷"
-        position_dict["name"] = name
+
         position_dict["quantity"] = pos["quantity"]
+        position_dict["recommended_stop_loss_pct"] = default_target_stop_pct
         position_dict["average_price"] = round(pos["averagePrice"], 2)
-        position_dict["current_price"] = get_price(pos["ticker"])
+        position_dict["current_price"] = get_price(ticker_info["ticker"])
         position_dict["profit_pct"] = round(((position_dict["current_price"] - pos["averagePrice"]) / pos["averagePrice"]) * 100, 2)
-        position_dict["tolerance"] = 1  # percent
+        position_dict["tolerance"] = 0.9
 
         # Existing stop (if any)
         stop_order = next((o for o in stop_orders if o.get("ticker") == pos["ticker"]), None)
         position_dict["stop_loss_price"] = float(stop_order["stopPrice"]) if stop_order is not None else 0
         position_dict["stop_loss_quantity"] = float(abs(stop_order["quantity"])) if stop_order is not None else 0
-        position_dict["recommended_stop_loss"] = update_stop_loss(position_dict["ticker"], position_dict["current_price"], db, position_dict["recommended_stop_loss_pct"])
+
+        # position_dict["recommended_stop_loss"] = update_stop_loss(position_dict["ticker"], position_dict["current_price"], db, position_dict["recommended_stop_loss_pct"])
+        # Always 2% under the buying price
+        position_dict["recommended_stop_loss"] = round((position_dict["average_price"] * (1 - position_dict["recommended_stop_loss_pct"] / 100)), 2)
 
         # Actual distance from current price
         if position_dict["stop_loss_price"] is not None:
@@ -234,7 +191,7 @@ def get_current_positions(db, default_target_stop_pct = 2):
 
         if position_dict["stop_loss_price"] is None \
             or position_dict["quantity"] > position_dict["stop_loss_quantity"] \
-            or (position_dict["stop_loss_distance_pct"] - position_dict["recommended_stop_loss_pct"]) >= position_dict["tolerance"] \
+            or abs(position_dict["stop_loss_price"] - position_dict["recommended_stop_loss"]) >= position_dict["tolerance"] \
             or position_dict["stop_loss_distance_pct"] < 0:
             position_dict["needs_adjusting"] = True
         else:
@@ -252,8 +209,8 @@ def get_pending_orders():
     for order in pending_orders:
         order_dict = {}
 
-        if order["ticker"] in TICKERS:
-            name = TICKERS[order["ticker"]]
+        if order["ticker"] in T212_PSEUDOTICKERS:
+            name = T212_PSEUDOTICKERS[order["ticker"]]
         else:
             name = order["ticker"]
 
@@ -264,9 +221,27 @@ def get_pending_orders():
             order_dict["currency"] = "💵"
         else:
             order_dict["currency"] = "💷"
-        order_dict["limit_proce"] = round(order["limitPrice"], 2)
+        order_dict["limit_price"] = round(order["limitPrice"], 2)
         order_dict["quantity"] = order["quantity"]
+        orders.append(order_dict)
 
     time.sleep(1)  # To avoid hitting rate limits
-    orders.append(order_dict)
+
     return orders
+
+def get_last_entries():
+    json_url = 'http://stuff.dabeed.net/suggested_entries.json'
+
+    try:
+        response = requests.get(json_url, timeout=10)
+        response.raise_for_status()
+
+        # Parse JSON
+        data = response.json()
+        return data
+    except requests.exceptions.RequestException as e:
+        return f"Error fetching data from URL: {str(e)}"
+    except json.JSONDecodeError as e:
+        return f"Error parsing JSON: {str(e)}"
+    except Exception as e:
+        return f"Unexpected error: {str(e)}"

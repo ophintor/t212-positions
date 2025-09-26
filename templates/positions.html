@@ -13,67 +13,72 @@
             background-color: #121212;
             color: #e0e0e0;
             line-height: 1.6;
-            font-size: 16px; /* Increased font size */
+            font-size: 16px;
         }
-
         h1 {
             text-align: center;
             margin: 20px 0;
             color: #ffffff;
-            font-size: 32px; /* Increased font size */
+            font-size: 32px;
         }
-
         table {
             width: 90%;
             margin: 20px auto;
             border-collapse: collapse;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
             background-color: #1e1e1e;
-            font-size: 15px; /* Increased font size */
+            font-size: 15px;
         }
 
+        table#orders-table {
+            width: 50%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+            background-color: #1e1e1e;
+            font-size: 15px;
+        }
         th, td {
             border: 1px solid #333;
             padding: 12px;
             text-align: left;
         }
-
         th {
             background-color: #007BFF;
             color: white;
             text-transform: uppercase;
             font-size: 16px;
         }
-
-        tr:nth-child(even) {
-            background-color: #2a2a2a;
-        }
-
-        tr:hover {
-            background-color: #333333;
-        }
-
-        td {
-            font-size: 16px;
-        }
-
-        td:nth-child(6) {
-            font-weight: bold;
-        }
-
-        td:last-child {
-            text-align: center;
-        }
-
+        tr:nth-child(even) { background-color: #2a2a2a; }
+        tr:hover { background-color: #333333; }
+        td { font-size: 16px; }
+        td:nth-child(6) { font-weight: bold; }
+        td:last-child { text-align: center; }
         p {
             text-align: center;
             font-size: 16px;
             color: #999;
         }
+        .mono {
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        .subtle-link {
+            color: #bbb;
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+        }
+
+        .subtle-link:hover {
+            color: #ddff00;
+            border-bottom: 1px solid #ddff00;
+        }
     </style>
 </head>
 <body>
-    <h1>Current Positions</h1>
+    <h1>🧘🏽‍♂️ Current Positions</h1>
+    <p id="last-updated"><strong>Generated on:</strong>--</p>
+    <p>[ <a class="subtle-link" href="/entries">Check potential entries</a> ]</p>
+
     <table>
         <thead>
             <tr>
@@ -81,9 +86,9 @@
                 <th style="text-align: center;width: 19%;">Name</th>
                 <th style="text-align: center;width: 9%;">Quantity</th>
                 <th style="text-align: center;width: 7%;">Currency</th>
-                <th style="text-align: center;width: 10%;">Current Price</th>
-                <th style="text-align: center;width: 10%;">Purchased Price</th>
-                <th style="text-align: center;width: 9%;;">Current P/L %</th>
+                <th style="text-align: center;width: 8%;">Current Price</th>
+                <th style="text-align: center;width: 8%;">Purchased Price</th>
+                <th style="text-align: center;width: 13%;">Current P/L %</th>
                 <th style="text-align: center;width: 14%;">Recommended Stop-Loss</th>
                 <th style="text-align: center;width: 14%;">Current Stop-Loss</th>
             </tr>
@@ -92,7 +97,22 @@
             <tr><td colspan="10">Loading...</td></tr>
         </tbody>
     </table>
-    <div id="last-updated" style="text-align: center; font-size: 14px;">Last updated: --</div>
+
+    <h1>💰 Pending Buy Orders</h1>
+    <table id="orders-table">
+        <thead>
+            <tr>
+                <th style="text-align: center;width: 8%;">Ticker</th>
+                <th style="text-align: center;width: 20%;">Name</th>
+                <th style="text-align: center;width: 7%;">Currency</th>
+                <th style="text-align: center;width: 9%;">Quantity</th>
+                <th style="text-align: center;width: 10%;">Limit Price</th>
+            </tr>
+        </thead>
+        <tbody id="orders">
+            <tr><td colspan="6">Loading...</td></tr>
+        </tbody>
+    </table>
 
     <script>
     let previousData = {};
@@ -107,7 +127,6 @@
             tbody.innerHTML = "";
 
             positionsData.forEach(position => {
-                // pick color for profit_pct
                 let profitColor = "inherit";
                 if (position.profit_pct > 3) profitColor = "rgb(0, 255, 0)";
                 else if (position.profit_pct > 2) profitColor = "rgb(0, 225, 0)";
@@ -118,12 +137,13 @@
                 else if (position.profit_pct < -1) profitColor = "rgb(195, 0, 0)";
                 else if (position.profit_pct < 0) profitColor = "rgb(165, 0, 0)";
 
-                let profitText = `${position.profit_pct}%&nbsp;&nbsp;&nbsp;😐`;
-                if (position.profit_pct > 0) profitText = `${position.profit_pct}%&nbsp;&nbsp;&nbsp;🔥`;
-                else if (position.profit_pct < 0) profitText = `${position.profit_pct}%&nbsp;&nbsp;&nbsp;🙀`;
+                let profit_amount = ((position.current_price - position.average_price) * position.quantity).toFixed(2);
+                let profitText = `${profit_amount} (${position.profit_pct}%)&nbsp;&nbsp;&nbsp;`;
+                if (position.profit_pct > 0) profitText += `🔥`;
+                else if (position.profit_pct < 0) profitText += `🙀`;
+                else if (position.profit_pct == 0) profitText += `😐`;
 
                 let stopLossBg = position.needs_adjusting ? "coral" : "inherit";
-
                 const tr = document.createElement("tr");
 
                 let priceColor = "yellow";
@@ -134,23 +154,24 @@
                 }
 
                 let currentStopLoss = position.stop_loss_quantity == 0 ? "🙉&nbsp;&nbsp;Unset" : "";
-
                 if (position.stop_loss_quantity == position.quantity) {
                     currentStopLoss = `🤓&nbsp;&nbsp;${position.stop_loss_price} (${position.stop_loss_distance_pct}%)`;
                 } else if (position.stop_loss_quantity > 0) {
                     currentStopLoss = `🙉&nbsp;&nbsp;[${position.stop_loss_quantity}/${position.quantity}]&nbsp;&nbsp;&nbsp;${position.stop_loss_price} (${position.stop_loss_distance_pct}%)`;
+                } else if (position.needs_adjusting && position.stop_loss_quantity > 0) {
+                    currentStopLoss = `🙉&nbsp;&nbsp;${position.stop_loss_price} (${position.stop_loss_distance_pct}%)`;
                 }
 
                 tr.innerHTML = `
-                    <td><strong>${position.ticker}</strong></td>
+                    <td class="mono"><strong>${position.short_name}</strong></td>
                     <td><strong>${position.name}</strong></td>
-                    <td style="text-align: right;">${position.quantity}</td>
+                    <td class="mono" style="text-align: right;">${position.quantity}</td>
                     <td style="text-align: center; font-size: 32px; padding: 0px;">${position.currency}</td>
-                    <td style="text-align: right; color: ${priceColor};">${position.current_price}</td>
-                    <td style="text-align: right;">${position.average_price}</td>
-                    <td style="text-align: right; color: ${profitColor};">${profitText}</td>
-                    <td style="text-align: center; background-color: ${stopLossBg};">⛔️&nbsp;&nbsp;${position.recommended_stop_loss} (${position.recommended_stop_loss_pct}%)</td>
-                    <td style="text-align: center; background-color: ${stopLossBg};">${currentStopLoss}</td>
+                    <td class="mono" style="text-align: right; color: ${priceColor};">${position.current_price}</td>
+                    <td class="mono" style="text-align: right;">${position.average_price}</td>
+                    <td class="mono" style="text-align: right; color: ${profitColor};">${profitText}</td>
+                    <td class="mono" style="text-align: center; background-color: ${stopLossBg};">⛔️&nbsp;&nbsp;${position.recommended_stop_loss} (${position.recommended_stop_loss_pct}%)</td>
+                    <td class="mono" style="text-align: center; background-color: ${stopLossBg};">${currentStopLoss}</td>
                 `;
                 tbody.appendChild(tr);
 
@@ -162,11 +183,28 @@
                 previousData[position.ticker] = { current_price: position.current_price };
             });
 
-            setTimeout(() => {}, 1000);
-            const orders = await fetch('/orders');
-            if (!orders.ok) throw new Error("HTTP error " + orders.status);
-            const ordersData = await orders.json();
-            console.log("Pending Orders:", ordersData);
+            // fetch orders
+            const ordersRes = await fetch('/orders');
+            if (!ordersRes.ok) throw new Error("HTTP error " + ordersRes.status);
+            const ordersData = await ordersRes.json();
+            const ordersBody = document.getElementById("orders");
+            ordersBody.innerHTML = "";
+
+            if (ordersData.length === 0) {
+                ordersBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No orders found</td></tr>`;
+            } else {
+                ordersData.forEach(order => {
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td>${order.ticker}</td>
+                        <td>${order.name}</td>
+                        <td style="text-align: center;">${order.currency}</td>
+                        <td style="text-align: right;">${order.quantity}</td>
+                        <td style="text-align: center;">${order.limit_price}</td>
+                    `;
+                    ordersBody.appendChild(tr);
+                });
+            }
 
         } catch (err) {
             console.error("Fetch error:", err);
