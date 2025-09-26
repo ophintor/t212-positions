@@ -1,10 +1,11 @@
-import sqlite3
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, render_template_string, jsonify
 import papishares
+import entries
 
 app = Flask(__name__)
 db = 'positions.db'
 papishares.initialize_database(db)
+entries = entries.get_todays_entries()
 
 @app.route('/positions')
 def get_positions():
@@ -15,6 +16,10 @@ def get_positions():
 def get_orders():
     orders = papishares.get_pending_orders()
     return orders
+
+@app.route('/entries')
+def find_entries():
+    return render_template_string('entries.html', entries=entries)
 
 @app.route('/')
 def index():

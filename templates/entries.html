@@ -1,0 +1,10 @@
+    <html>
+    <head><title>Recent Highs</title></head>
+    <body>
+      <h1>Turtle Breakouts</h1>
+      {% for window, tickers in highs.items() %}
+        <h2>{{ window }}-day highs (last 2 days)</h2>
+        <p>{{ tickers|join(', ') }}</p>
+      {% endfor %}
+    </body>
+    </html>

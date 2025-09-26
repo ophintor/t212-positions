@@ -24,6 +24,7 @@ TICKERS = {
     "APP_US_EQ": "AppLovin",
     "AVl_EQ": "Aviva",
     "CAPA_US_EQ": "Quantum-Si",
+    "CHSSl_EQ": "World Chess",
     "COFFl_EQ": "WT Coffee",
     "CRDO_US_EQ": "Credo",
     "DMYI_US_EQ": "IonQ",
@@ -58,13 +59,13 @@ TICKERS = {
 }
 
 NON_STANDARD_STOPS = {
-    "DMYI_US_EQ": 8,    # IonQ - volatile
-    "QWTMl_EQ": 8,      # WT Quantum Computing - volatile
-    "WREEl_EQ": 6,      # WT Rare Metals - volatile
-    "WRENl_EQ": 6,      # WT Renewables - volatile
-    "XPOA_US_EQ": 8,    # D-Wave - volatile
-    "IPOE_US_EQ": 6,    # SoFi - volatile
-    "GDWNl_EQ": 6,      # Goodwin - volatile
+    "DMYI_US_EQ": 5,    # IonQ - volatile
+    "QWTMl_EQ": 3,      # WT Quantum Computing - volatile
+    "WREEl_EQ": 3,      # WT Rare Metals - volatile
+    "WRENl_EQ": 3,      # WT Renewables - volatile
+    "XPOA_US_EQ": 5,    # D-Wave - volatile
+    "IPOE_US_EQ": 5,    # SoFi - volatile
+    "GDWNl_EQ": 5,      # Goodwin - volatile
 }
 
 def initialize_database(db):
@@ -264,7 +265,7 @@ def get_pending_orders():
             order_dict["currency"] = "💵"
         else:
             order_dict["currency"] = "💷"
-        order_dict["limit_proce"] = round(order["limitPrice"], 2)
+        order_dict["limit_price"] = round(order["limitPrice"], 2)
         order_dict["quantity"] = order["quantity"]
 
     time.sleep(1)  # To avoid hitting rate limits
