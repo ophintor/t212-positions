@@ -83,14 +83,14 @@
         <thead>
             <tr>
                 <th style="text-align: center;width: 8%;">Ticker</th>
-                <th style="text-align: center;width: 19%;">Name</th>
-                <th style="text-align: center;width: 9%;">Quantity</th>
-                <th style="text-align: center;width: 7%;">Currency</th>
-                <th style="text-align: center;width: 8%;">Current Price</th>
-                <th style="text-align: center;width: 8%;">Purchased Price</th>
-                <th style="text-align: center;width: 13%;">Current P/L %</th>
-                <th style="text-align: center;width: 14%;">Recommended Stop-Loss</th>
-                <th style="text-align: center;width: 14%;">Current Stop-Loss</th>
+                <th style="text-align: center;width: 22%;">Name</th>
+                <th style="text-align: center;width: 10%;">Quantity</th>
+                <th style="text-align: center;width: 9%;">Currency</th>
+                <th style="text-align: center;width: 9%;">Purchased Price</th>
+                <th style="text-align: center;width: 9%;">Current Price</th>
+                <th style="text-align: center;width: 9%;">Max Price</th>
+                <th style="text-align: center;width: 9%;">Stop-Loss</th>
+                <th style="text-align: center;width: 15%;">Current P/L %</th>
             </tr>
         </thead>
         <tbody id="positions">
@@ -143,7 +143,6 @@
                 else if (position.profit_pct < 0) profitText += `🙀`;
                 else if (position.profit_pct == 0) profitText += `😐`;
 
-                let stopLossBg = position.needs_adjusting ? "coral" : "inherit";
                 const tr = document.createElement("tr");
 
                 let priceColor = "yellow";
@@ -153,31 +152,22 @@
                     else if (position.current_price < prevPrice) priceColor = "red";
                 }
 
-                let currentStopLoss = position.stop_loss_quantity == 0 ? "🙉&nbsp;&nbsp;Unset" : "";
-                if (position.stop_loss_quantity == position.quantity) {
-                    currentStopLoss = `🤓&nbsp;&nbsp;${position.stop_loss_price} (${position.stop_loss_distance_pct}%)`;
-                } else if (position.stop_loss_quantity > 0) {
-                    currentStopLoss = `🙉&nbsp;&nbsp;[${position.stop_loss_quantity}/${position.quantity}]&nbsp;&nbsp;&nbsp;${position.stop_loss_price} (${position.stop_loss_distance_pct}%)`;
-                } else if (position.needs_adjusting && position.stop_loss_quantity > 0) {
-                    currentStopLoss = `🙉&nbsp;&nbsp;${position.stop_loss_price} (${position.stop_loss_distance_pct}%)`;
-                }
-
                 tr.innerHTML = `
-                    <td class="mono"><strong>${position.short_name}</strong></td>
+                    <td class="mono" style="text-align: center;"><strong>${position.short_name}</strong></td>
                     <td><strong>${position.name}</strong></td>
                     <td class="mono" style="text-align: right;">${position.quantity}</td>
                     <td style="text-align: center; font-size: 32px; padding: 0px;">${position.currency}</td>
-                    <td class="mono" style="text-align: right; color: ${priceColor};">${position.current_price}</td>
                     <td class="mono" style="text-align: right;">${position.average_price}</td>
+                    <td class="mono" style="text-align: right; color: ${priceColor};">${position.current_price}</td>
+                    <td class="mono" style="text-align: right;">${position.max_price}</td>
+                    <td class="mono" style="text-align: right;">${position.stop_loss_price}</td>
                     <td class="mono" style="text-align: right; color: ${profitColor};">${profitText}</td>
-                    <td class="mono" style="text-align: center; background-color: ${stopLossBg};">⛔️&nbsp;&nbsp;${position.recommended_stop_loss} (${position.recommended_stop_loss_pct}%)</td>
-                    <td class="mono" style="text-align: center; background-color: ${stopLossBg};">${currentStopLoss}</td>
                 `;
                 tbody.appendChild(tr);
 
                 if (priceColor) {
                     setTimeout(() => {
-                        tr.cells[4].style.color = "yellow";
+                        tr.cells[5].style.color = "yellow";
                     }, 600);
                 }
                 previousData[position.ticker] = { current_price: position.current_price };

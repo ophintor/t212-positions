@@ -13,7 +13,7 @@ def get_positions():
 
 @app.route('/orders')
 def get_orders():
-    orders = papishares.get_pending_orders()
+    orders = papishares.get_pending_orders(all_tickers)
     return orders
 
 @app.route('/entries')

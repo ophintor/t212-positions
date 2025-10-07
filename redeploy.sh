@@ -8,6 +8,7 @@ helm upgrade --install \
   --namespace papishares \
   --create-namespace \
   --set env.api_key=$(cat .env | grep API_KEY | cut -f2 -d'=') \
+  --set env.secret_key=$(cat .env | grep SECRET_KEY | cut -f2 -d'=') \
   --set env.api_base=$(cat .env | grep API_BASE | cut -f2 -d'=') \
   --set env.bot_token=$(cat .env | grep BOT_TOKEN | cut -f2 -d'=') \
   --set env.chat_id=$(cat .env | grep CHAT_ID | cut -f2 -d'=')
