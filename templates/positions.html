@@ -186,11 +186,11 @@
                 ordersData.forEach(order => {
                     const tr = document.createElement("tr");
                     tr.innerHTML = `
-                        <td>${order.ticker}</td>
+                        <td class="mono" style="text-align: center;">${order.ticker}</td>
                         <td>${order.name}</td>
                         <td style="text-align: center;">${order.currency}</td>
-                        <td style="text-align: right;">${order.quantity}</td>
-                        <td style="text-align: center;">${order.limit_price}</td>
+                        <td class="mono" style="text-align: right;">${order.quantity}</td>
+                        <td class="mono" style="text-align: center;">${order.limit_price}</td>
                     `;
                     ordersBody.appendChild(tr);
                 });
