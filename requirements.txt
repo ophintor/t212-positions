@@ -1,11 +1,11 @@
 colorama
 Flask
 html5lib
+logger
 pandas
 pytest
 python-dotenv
 requests
+scipy
 tabulate
 yfinance
-scipy
-logger

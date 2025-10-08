@@ -83,14 +83,16 @@
         <thead>
             <tr>
                 <th style="text-align: center;width: 8%;">Ticker</th>
-                <th style="text-align: center;width: 22%;">Name</th>
-                <th style="text-align: center;width: 10%;">Quantity</th>
-                <th style="text-align: center;width: 9%;">Currency</th>
-                <th style="text-align: center;width: 9%;">Purchased Price</th>
-                <th style="text-align: center;width: 9%;">Current Price</th>
-                <th style="text-align: center;width: 9%;">Max Price</th>
-                <th style="text-align: center;width: 9%;">Stop-Loss</th>
+                <th style="text-align: center;width: 20%;">Name</th>
+                <th style="text-align: center;width: 7%;">Quantity</th>
+                <th style="text-align: center;width: 8%;">Currency</th>
+                <th style="text-align: center;width: 8%;">Purchased Price</th>
+                <th style="text-align: center;width: 8%;">Current Price</th>
+                <th style="text-align: center;width: 8%;">Max Price</th>
+                <th style="text-align: center;width: 8%;">Stop-Loss</th>
                 <th style="text-align: center;width: 15%;">Current P/L %</th>
+                <th style="text-align: center;width: 5%;">MACD signal</th>
+                <th style="text-align: center;width: 5%;">MACD crossover</th>
             </tr>
         </thead>
         <tbody id="positions">
@@ -152,6 +154,14 @@
                     else if (position.current_price < prevPrice) priceColor = "red";
                 }
 
+                let macd_signal = "";
+                let macd_crossover = "";
+                if (position.macd_signal == "BULLISH") macd_signal = "🟢"; else macd_signal = "🔴";
+
+                if (!position.macd_crossover == "BULLISH") macd_crossover == "🟢";
+                else if (position.macd_crossover == "BEARISH") macd_crossover == "🔴";
+                else macd_crossover = "⚪️";
+
                 tr.innerHTML = `
                     <td class="mono" style="text-align: center;"><strong>${position.short_name}</strong></td>
                     <td><strong>${position.name}</strong></td>
@@ -162,6 +172,8 @@
                     <td class="mono" style="text-align: right;">${position.max_price}</td>
                     <td class="mono" style="text-align: right;">${position.stop_loss_price}</td>
                     <td class="mono" style="text-align: right; color: ${profitColor};">${profitText}</td>
+                    <td class="mono" style="text-align: center;">${macd_signal}</td>
+                    <td class="mono" style="text-align: center;"">${macd_crossover}</td>
                 `;
                 tbody.appendChild(tr);
 
@@ -186,11 +198,11 @@
                 ordersData.forEach(order => {
                     const tr = document.createElement("tr");
                     tr.innerHTML = `
-                        <td>${order.ticker}</td>
+                        <td class="mono" style="text-align: center;">${order.ticker}</td>
                         <td>${order.name}</td>
                         <td style="text-align: center;">${order.currency}</td>
-                        <td style="text-align: right;">${order.quantity}</td>
-                        <td style="text-align: center;">${order.limit_price}</td>
+                        <td class="mono" style="text-align: right;">${order.quantity}</td>
+                        <td class="mono" style="text-align: center;">${order.limit_price}</td>
                     `;
                     ordersBody.appendChild(tr);
                 });
