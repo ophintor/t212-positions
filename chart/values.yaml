@@ -66,4 +66,7 @@ podSecurityContext: {}
 securityContext: {}
 
 env: {}
-extraEnv: []
+
+extraEnv:
+  - name: "DB_PATH"
+    value: "/data/papishares.db"

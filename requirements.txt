@@ -1,7 +1,9 @@
+certifi
 colorama
 Flask
 html5lib
 logger
+lxml
 pandas
 pytest
 python-dotenv
