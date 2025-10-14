@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from typing import Dict, Optional, Tuple
-from datetime import date
+from datetime import date, datetime, timedelta
+import math
 import json
 import logging
 import os
@@ -8,6 +9,7 @@ import pandas as pd
 import requests, time
 import sqlite3
 import yfinance as yf
+from tabulate import tabulate
 
 load_dotenv()
 
@@ -16,6 +18,9 @@ T212_API_KEY = os.getenv("T212_API_KEY")
 T212_SECRET_KEY = os.getenv("T212_SECRET_KEY")
 TELEGRAM_BOT_TOKEN =os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+RISK_PERCENTAGE = 0.7 # Percentage of account to risk on all positions
+TOTAL_RISK_PERCENTAGE = 7.0 # Total percentage of account to risk across all positions
 
 HEADERS = {
     "Content-Type": "application/json"
@@ -39,6 +44,14 @@ def initialize_database(db):
             stop_loss REAL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS macd_notifications (
+            symbol TEXT PRIMARY KEY,
+            last_crossover_type TEXT,
+            last_crossover_time TIMESTAMP,
+            last_notified_time TIMESTAMP
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -46,6 +59,48 @@ def get_db(db):
     conn = sqlite3.connect(db)
     conn.row_factory = sqlite3.Row
     return conn
+
+def get_sma(symbol, days=17):
+    """
+    Calculate the Simple Moving Average for a given stock symbol.
+    Fetches data from Yahoo Finance.
+
+    Parameters:
+    symbol (str): Stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')
+    days (int): Number of days for the SMA calculation (default: 17)
+
+    Returns:
+    dict: Dictionary containing the SMA value, current price, and date
+          Returns None if there's an error or insufficient data
+    """
+    try:
+        # Create ticker object
+        ticker = yf.Ticker(symbol)
+
+        # Get enough historical data (fetch 2x the days to account for weekends/holidays)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days * 2)
+
+        # Fetch historical data
+        data = ticker.history(start=start_date, end=end_date)
+
+        if len(data) < days:
+            logger.info(f"Insufficient data for {symbol}. Need {days} days, got {len(data)}")
+            return None
+
+        # Get closing prices
+        prices = data['Close'].tolist()
+
+        # Calculate SMA
+        last_n = prices[-days:]
+        sma_value = sum(last_n) / days
+
+        return round(sma_value, 2)
+
+    except Exception as e:
+        print(f"Error fetching data for {symbol}: {e}")
+        return None
+
 
 def calculate_macd(
     df: pd.DataFrame,
@@ -186,7 +241,7 @@ def analyze_macd_signal(symbol: str, show_chart: bool = False) -> Optional[str]:
     histogram = latest['Histogram']
     date = df.index[-1].strftime('%Y-%m-%d %H:%M:%S')
 
-    logger.info(f"\n{'='*60}")
+    logger.info(f"{'='*60}")
     logger.info(f"{symbol} - MACD Analysis")
     logger.info(f"{'='*60}")
     logger.info(f"Date: {date}")
@@ -198,13 +253,13 @@ def analyze_macd_signal(symbol: str, show_chart: bool = False) -> Optional[str]:
     # Determine signal
     if macd > signal and histogram > 0:
         signal_type = "BULLISH"
-        logger.info(f"\n📈 Signal: {signal_type} (MACD above signal line)")
+        logger.info(f"📈 Signal: {signal_type} (MACD above signal line)")
     elif macd < signal and histogram < 0:
         signal_type = "BEARISH"
-        logger.info(f"\n📉 Signal: {signal_type} (MACD below signal line)")
+        logger.info(f"📉 Signal: {signal_type} (MACD below signal line)")
     else:
         signal_type = "NEUTRAL"
-        logger.info(f"\n➡️  Signal: {signal_type}")
+        logger.info(f"➡️  Signal: {signal_type}")
 
     # Check for crossovers
     crossover = None
@@ -225,7 +280,7 @@ def analyze_macd_signal(symbol: str, show_chart: bool = False) -> Optional[str]:
 
     # Show recent history if requested
     if show_chart:
-        logger.info(f"\n📊 Recent MACD History (Last 10 periods):")
+        logger.info(f"📊 Recent MACD History (Last 10 periods):")
         logger.info("-" * 60)
         recent = df[['Close', 'MACD', 'Signal', 'Histogram']].tail(10)
         logger.info(recent.to_string())
@@ -254,9 +309,9 @@ def analyze_multiple_symbols(symbols: list, delay: float = 0) -> Dict[str, Dict]
 
     results = {}
 
-    logger.info(f"\n{'='*60}")
+    logger.info(f"{'='*60}")
     logger.info(f"Analyzing {len(symbols)} symbols")
-    logger.info(f"{'='*60}\n")
+    logger.info(f"{'='*60}")
 
     for symbol in symbols:
         result = get_latest_macd(symbol)
@@ -283,32 +338,44 @@ def analyze_multiple_symbols(symbols: list, delay: float = 0) -> Dict[str, Dict]
 
     return results
 
+def has_crossover_been_notified(db, symbol, crossover_type):
+    """Check if we've already notified about this crossover"""
+    conn = sqlite3.connect(db)
+    cursor = conn.cursor()
 
-def get_stock_info(symbol: str) -> Dict:
-    """
-    Get additional stock information.
+    cursor.execute("""
+        SELECT last_crossover_type, last_notified_time
+        FROM macd_notifications
+        WHERE symbol = ?
+    """, (symbol,))
 
-    Returns:
-    --------
-    dict
-        Basic stock information
-    """
+    result = cursor.fetchone()
+    conn.close()
 
-    try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
+    if result is None:
+        return False
 
-        return {
-            'name': info.get('longName', 'N/A'),
-            'sector': info.get('sector', 'N/A'),
-            'industry': info.get('industry', 'N/A'),
-            'marketCap': info.get('marketCap', 'N/A'),
-            'currency': info.get('currency', 'N/A')
-        }
-    except Exception as e:
-        logger.info(f"⚠️  Could not fetch info for {symbol}: {e}")
-        return {}
+    last_type, last_time = result
+    return last_type == crossover_type
 
+def record_crossover_notification(db, symbol, crossover_type):
+    """Record that we've notified about this crossover"""
+    conn = sqlite3.connect(db)
+    cursor = conn.cursor()
+
+    now = datetime.now().isoformat()
+
+    cursor.execute("""
+        INSERT INTO macd_notifications (symbol, last_crossover_type, last_crossover_time, last_notified_time)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(symbol) DO UPDATE SET
+            last_crossover_type = excluded.last_crossover_type,
+            last_crossover_time = excluded.last_crossover_time,
+            last_notified_time = excluded.last_notified_time
+    """, (symbol, crossover_type, now, now))
+
+    conn.commit()
+    conn.close()
 
 def update_max_price(ticker, price, db):
     conn = get_db(db)
@@ -327,26 +394,47 @@ def update_max_price(ticker, price, db):
     conn.commit()
     conn.close()
 
-def update_stop_loss(ticker, price, db, trail_percent):
+def update_stop_loss(ticker, stop_loss_price, db):
     conn = get_db(db)
     c = conn.cursor()
 
     c.execute("SELECT stop_loss FROM positions WHERE ticker=?", (ticker,))
     row = c.fetchone()
 
-    suggested_stop_loss = round(price * (1 - trail_percent / 100), 2)
-
     if row is None:
         c.execute("INSERT INTO positions (ticker, stop_loss) VALUES (?, ?)",
-                  (ticker, suggested_stop_loss))
+                  (ticker, stop_loss_price))
     else:
         c.execute("UPDATE positions SET stop_loss=? WHERE ticker=?",
-                  (suggested_stop_loss, ticker))
+                  (stop_loss_price, ticker))
 
     conn.commit()
     conn.close()
 
-    return suggested_stop_loss
+def cleanup_stale_notifications(db, active_tickers):
+    """Remove notification records for tickers not in current positions"""
+    conn = sqlite3.connect(db)
+    cursor = conn.cursor()
+
+    # Get all tickers currently in the database
+    cursor.execute("SELECT DISTINCT ticker FROM positions")
+    db_tickers = {row[0] for row in cursor.fetchall()}
+
+    # Find tickers to remove (in DB but not in active positions)
+    stale_tickers = db_tickers - set(active_tickers)
+
+    if stale_tickers:
+        # Delete stale entries
+        placeholders = ','.join('?' * len(stale_tickers))
+        cursor.execute(f"DELETE FROM positions WHERE ticker IN ({placeholders})",
+                      tuple(stale_tickers))
+        deleted_count = cursor.rowcount
+        conn.commit()
+        logger.info(f"Cleaned up {deleted_count} stale notification records for tickers: {stale_tickers}")
+    else:
+        logger.info("No stale notification records to clean up")
+
+    conn.close()
 
 def get_stop_loss(ticker, db):
     conn = get_db(db)
@@ -378,6 +466,12 @@ def get_max_price(ticker, db):
 
 def fetch_all_tickers_info():
     url = f"{T212_API_BASE}/metadata/instruments"
+    resp = requests.get(url, headers=HEADERS, auth=(T212_API_KEY,T212_SECRET_KEY))
+    resp.raise_for_status()
+    return resp.json()
+
+def get_account_value():
+    url = f"{T212_API_BASE}/account/cash"
     resp = requests.get(url, headers=HEADERS, auth=(T212_API_KEY,T212_SECRET_KEY))
     resp.raise_for_status()
     return resp.json()
@@ -439,9 +533,17 @@ def send_telegram_message(message):
     else:
         logger.info("Failed to send message:", response.text)
 
-def get_current_positions(db, all_tickers, default_target_stop_pct = 2):
+def get_current_positions(db, all_tickers, risk_percentage = RISK_PERCENTAGE):
+    result = {} # Full result dict to return, including positions and total risk
+    total_risk = 0.0
     all_positions = []
+
     positions = fetch_positions()
+    orders = fetch_orders()
+    stop_orders = [o for o in orders if o.get("type") in ["STOP", "STOP_LIMIT"]]
+
+    total_capital = get_account_value()["total"]
+    total_risk_per_trade = total_capital * risk_percentage / 100    # 0.07% of account value
 
     for pos in positions:
         position_dict = {}
@@ -452,11 +554,9 @@ def get_current_positions(db, all_tickers, default_target_stop_pct = 2):
         position_dict["ticker"] = ticker_info['ticker']
         position_dict["short_name"] = ticker_info['shortName']
         position_dict["name"] = ticker_info['name']
+        position_dict["currency"] = ticker_info["currencyCode"]
 
-        if ticker_info["currencyCode"] == "USD":
-            position_dict["currency"] = "💵"
-        else:
-            position_dict["currency"] = "💷"
+        if ticker_info["currencyCode"] == "GBX" or ticker_info["currencyCode"] == "GBP" or ticker_info["shortName"] in ["3CFL", "COFF", "COCO"]: # Coffee/Cocoa is in USD but listed in London
             position_dict["short_name"] += ".L"
 
         position_dict["quantity"] = pos["quantity"]
@@ -473,25 +573,57 @@ def get_current_positions(db, all_tickers, default_target_stop_pct = 2):
         else:
             position_dict["max_price"] = max_price
 
+        # Calculate the stop loss and update the DB if needed
+        position_value = position_dict["quantity"] * position_dict["average_price"]
+        stop_loss_caculating_price = max(position_dict["average_price"], position_dict["max_price"])
 
-        # Get the stop loss and update the DB if needed
-        position_dict["stop_loss_price"] = update_stop_loss(
-            position_dict["ticker"],
-            max(position_dict["average_price"],position_dict["current_price"]),
-            db,
-            default_target_stop_pct
-        )
+        if ticker_info["currencyCode"] == "GBX":
+            position_value /= 100
+            risk_for_calculation = total_risk_per_trade * 100
+        else:
+            risk_for_calculation = total_risk_per_trade
+
+        position_dict["stop_loss_price"] = round(stop_loss_caculating_price - (risk_for_calculation / position_dict["quantity"]), 2)
+        position_dict["stop_loss_percentage"] = round(((stop_loss_caculating_price - position_dict["stop_loss_price"]) / stop_loss_caculating_price) * 100, 2)
+        update_stop_loss(position_dict["ticker"], position_dict["stop_loss_price"], db)
+
+        # Check if a manual stop loss has been set
+        stop_order = next((o for o in stop_orders if o.get("ticker") == pos["ticker"]), None)
+        # logger.info(f"Checking manual stop loss for {position_dict['ticker']}: {stop_order}")
+        position_dict["manual_stop_loss_price"] = float(stop_order["stopPrice"]) if stop_order is not None else None
+        position_dict["manual_stop_loss_quantity"] = stop_order["quantity"] if stop_order is not None else 0
+
+        # Calculate total risk
+        stop_loss_price = position_dict["manual_stop_loss_price"] if position_dict["manual_stop_loss_price"] is not None else position_dict["stop_loss_price"]
+        if position_dict["average_price"] > stop_loss_price:
+            risk_percentage = (position_dict["average_price"] - stop_loss_price) / position_dict["average_price"]
+            logger.info(f"Risk percentage for {position_dict['ticker']}: {risk_percentage*100:.2f}%")
+        else:
+            risk_percentage = 0.0
+        total_risk += risk_percentage * position_value
 
         # Check MACD
         signal_type, crossover = analyze_macd_signal(position_dict["short_name"])
+        # logger.info(f"Analyzing {position_dict['short_name']} ({position_dict['name']}): {signal_type} / {crossover}")
         position_dict["macd_signal"] = signal_type
         position_dict["macd_crossover"] = crossover
-        logger.info(f"Signal type: {signal_type}")
-        if crossover is None:
-            logger.info(f"No recent crossover.")
-        else:
-            logger.info(f"Crossover type: {crossover}")
-            send_telegram_message(f"🚨 {position_dict['short_name']} ({position_dict['name']}) MACD {crossover} crossover!")
+        # logger.info(f"Signal type: {signal_type}")
+
+        if crossover is not None:
+            symbol = position_dict["short_name"]
+            if not has_crossover_been_notified(db, symbol, crossover):
+                send_telegram_message(
+                    f"🚨 {position_dict['short_name']} ({position_dict['name']}) MACD {crossover} crossover!"
+                )
+                record_crossover_notification(db, symbol, crossover)
+                logger.info(f"Notification sent and recorded for {symbol} {crossover} crossover")
+            else:
+                logger.info(f"Already notified about {symbol} {crossover} crossover, skipping")
+
+        # Check SMA (17)
+        sma_value = get_sma(position_dict['short_name'], days=17)
+        position_dict['sma_17'] = sma_value if (sma_value is not None and not math.isnan(sma_value)) else 0.0
+        logger.info(f"SMA(17) for {position_dict['short_name']}: {position_dict['sma_17']}")
 
         # Check if stop loss has been reached, then sell at market and send a message (only weekdays)
         if position_dict["stop_loss_price"] >= position_dict["current_price"] and date.today().weekday() < 5:
@@ -499,7 +631,7 @@ def get_current_positions(db, all_tickers, default_target_stop_pct = 2):
             # and the error code will be 'SellingEquityNotOwned'
             rc = sell(position_dict['ticker'], position_dict['quantity'])
 
-            if "code" in rc and rc["code"] == "SellingEquityNotOwned":
+            if "type" in rc and rc["type"] == "/api-errors/selling-equity-not-owned":
                 logger.info(f"Could not sell {position_dict['ticker']}, probably because there is a stop loss in place")
             else:
                 message =  f"Stop loss activated for {position_dict['short_name']} - {position_dict['name']}.\n"
@@ -513,7 +645,21 @@ def get_current_positions(db, all_tickers, default_target_stop_pct = 2):
         all_positions.append(position_dict)
         time.sleep(1)  # To avoid hitting rate limits
 
-    return all_positions
+    # Clean up old symbols from DB
+    active_tickers = [position_dict['ticker'] for position_dict in all_positions]
+    cleanup_stale_notifications(db, active_tickers)
+
+    # Build json
+    result = {
+        "positions": sorted(all_positions, key=lambda order: order['profit_pct'], reverse=True),
+        "total_risk": total_risk / total_capital * 100
+    }
+
+    # logger.info(tabulate(result['positions'], headers='keys', tablefmt='simple'))
+    # logger.info(f"Total Risk: {result['total_risk']:.2f}% of account value")
+    logger.info(json.dumps(result, indent=4))
+
+    return result
 
 def get_pending_orders(all_tickers):
     orders = []

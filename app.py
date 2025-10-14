@@ -1,15 +1,16 @@
 from flask import Flask, render_template, render_template_string, jsonify
+import os
 import papishares
 
 app = Flask(__name__)
-db = 'positions.db'
+db = os.getenv('DB_PATH', './papishares.db')
 papishares.initialize_database(db)
 all_tickers = papishares.fetch_all_tickers_info()
 
 @app.route('/positions')
 def get_positions():
     positions = papishares.get_current_positions(db, all_tickers)
-    return sorted(positions, key=lambda order: order['profit_pct'], reverse=True)
+    return positions
 
 @app.route('/orders')
 def get_orders():
@@ -19,7 +20,7 @@ def get_orders():
 @app.route('/entries')
 def get_entries():
     entries = papishares.get_last_entries()
-    return render_template('entries.html', data=entries, risk=100)
+    return render_template('entries.html', data=entries, risk=70)
 
 @app.route('/')
 def index():

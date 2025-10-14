@@ -52,3 +52,10 @@ spec:
             - name: {{ .name }}
               value: {{ quote .value }}
             {{- end }}
+          volumeMounts:
+            - name: sqlite3-storage
+              mountPath: /data
+      volumes:
+        - name: sqlite3-storage
+          persistentVolumeClaim:
+            claimName: sqlite3-pvc

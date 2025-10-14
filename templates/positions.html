@@ -21,6 +21,12 @@
             color: #ffffff;
             font-size: 32px;
         }
+        h2 {
+            text-align: center;
+            margin: 10px 0;
+            color: #cccccc;
+            font-size: 22px;
+        }
         table {
             width: 90%;
             margin: 20px auto;
@@ -76,27 +82,29 @@
 </head>
 <body>
     <h1>🧘🏽‍♂️ Current Positions</h1>
-    <p id="last-updated"><strong>Generated on:</strong>--</p>
+    <h2 id="total-risk">Total risk: --</h2>
+    <p id="last-updated"><strong>Last updated:</strong>--</p>
     <p>[ <a class="subtle-link" href="/entries">Check potential entries</a> ]</p>
 
     <table>
         <thead>
             <tr>
-                <th style="text-align: center;width: 8%;">Ticker</th>
-                <th style="text-align: center;width: 20%;">Name</th>
+                <th style="text-align: center;width: 6%;">Ticker</th>
+                <th style="text-align: center;width: 18%;">Name</th>
                 <th style="text-align: center;width: 7%;">Quantity</th>
-                <th style="text-align: center;width: 8%;">Currency</th>
-                <th style="text-align: center;width: 8%;">Purchased Price</th>
-                <th style="text-align: center;width: 8%;">Current Price</th>
-                <th style="text-align: center;width: 8%;">Max Price</th>
-                <th style="text-align: center;width: 8%;">Stop-Loss</th>
-                <th style="text-align: center;width: 15%;">Current P/L %</th>
+                <th style="text-align: center;width: 7%;">Purchased Price</th>
+                <th style="text-align: center;width: 7%;">Current Price</th>
+                <th style="text-align: center;width: 7%;">Max Price</th>
+                <th style="text-align: center;width: 11%;">Auto Stop-Loss</th>
+                <th style="text-align: center;width: 7%;">Manual Stop-Loss</th>
+                <th style="text-align: center;width: 12%;">Current P/L</th>
                 <th style="text-align: center;width: 5%;">MACD signal</th>
-                <th style="text-align: center;width: 5%;">MACD crossover</th>
+                <th style="text-align: center;width: 5%;">MACD x-over</th>
+                <th style="text-align: center;width: 8%;">SMA(17)</th>
             </tr>
         </thead>
         <tbody id="positions">
-            <tr><td colspan="10">Loading...</td></tr>
+            <tr><td colspan="12">Loading...</td></tr>
         </tbody>
     </table>
 
@@ -118,13 +126,27 @@
 
     <script>
     let previousData = {};
+
     async function fetchData() {
         try {
             const res = await fetch('/positions');
             if (!res.ok) throw new Error("HTTP error " + res.status);
-            const positionsData = await res.json();
+            const data = await res.json();
+            console.log("Received data:", data);  // Debug log
+            console.log("total_risk value:", data.total_risk);  // Debug log
+            const positionsData = data.positions;
+            const total_risk = data.total_risk;
             const now = new Date();
+
             document.getElementById("last-updated").textContent = "Last updated: " + now.toLocaleTimeString();
+            document.getElementById("total-risk").textContent = "Total risk: " + total_risk.toFixed(2) + "%";
+
+            if (total_risk > 7.0 ){
+                document.getElementById("total-risk").style.color = "red";
+            } else {
+                document.getElementById("total-risk").style.color = "lightgreen";
+            }
+
             const tbody = document.getElementById("positions");
             tbody.innerHTML = "";
 
@@ -139,13 +161,36 @@
                 else if (position.profit_pct < -1) profitColor = "rgb(195, 0, 0)";
                 else if (position.profit_pct < 0) profitColor = "rgb(165, 0, 0)";
 
-                let profit_amount = ((position.current_price - position.average_price) * position.quantity).toFixed(2);
-                let profitText = `${profit_amount} (${position.profit_pct}%)&nbsp;&nbsp;&nbsp;`;
+                let profit_amount = 0
+                if (position.currency == "GBX") {
+                    price_currency = "p"
+                    profit_currency = "£"
+                    profit_amount = ((position.current_price - position.average_price) * position.quantity / 100).toFixed(2);
+                } else if (position.currency == "GBP") {
+                    profit_currency = price_currency = "£"
+                    profit_amount = ((position.current_price - position.average_price) * position.quantity).toFixed(2);
+                } else {
+                    profit_currency = price_currency = "$"
+                    profit_amount = ((position.current_price - position.average_price) * position.quantity).toFixed(2);
+                }
+
+                let stopLossColor = "inherit";
+                if (position.profit_pct > position.stop_loss_percentage) stopLossColor = "rgb(0, 225, 0)";
+                else if (position.profit_pct < position.stop_loss_percentage) stopLossColor = "rgb(225, 0, 0)";
+
+                if (position.manual_stop_loss_price !== null) {
+                    stopLossColor = "gray";
+                    manual_stop_loss_color = "rgb(225, 0, 0)";
+                    manual_stop_loss_price = price_currency + position.manual_stop_loss_price.toLocaleString();
+                } else {
+                    manual_stop_loss_price = "";
+                    manual_stop_loss_color = "inherit";
+                }
+
+                let profitText = `${profit_currency}${profit_amount.toLocaleString()} (${position.profit_pct}%) `;
                 if (position.profit_pct > 0) profitText += `🔥`;
                 else if (position.profit_pct < 0) profitText += `🙀`;
                 else if (position.profit_pct == 0) profitText += `😐`;
-
-                const tr = document.createElement("tr");
 
                 let priceColor = "yellow";
                 const prevPrice = previousData[position.ticker]?.current_price;
@@ -154,33 +199,40 @@
                     else if (position.current_price < prevPrice) priceColor = "red";
                 }
 
+                // MACD
                 let macd_signal = "";
                 let macd_crossover = "";
                 if (position.macd_signal == "BULLISH") macd_signal = "🟢"; else macd_signal = "🔴";
 
-                if (!position.macd_crossover == "BULLISH") macd_crossover == "🟢";
-                else if (position.macd_crossover == "BEARISH") macd_crossover == "🔴";
+                if (position.macd_crossover == "BULLISH") macd_crossover = "🟢";
+                else if (position.macd_crossover == "BEARISH") macd_crossover = "🔴";
                 else macd_crossover = "⚪️";
 
+                // SMA(17)
+                let sma_17 = price_currency + position.sma_17.toLocaleString();
+                let sma_17_color = "inherit";
+                if (position.sma_17 > position.current_price) sma_17_color = "red";
+                else if (position.sma_17 < position.current_price) sma_17_color = "lime";
+
+                const tr = document.createElement("tr");
                 tr.innerHTML = `
                     <td class="mono" style="text-align: center;"><strong>${position.short_name}</strong></td>
                     <td><strong>${position.name}</strong></td>
-                    <td class="mono" style="text-align: right;">${position.quantity}</td>
-                    <td style="text-align: center; font-size: 32px; padding: 0px;">${position.currency}</td>
-                    <td class="mono" style="text-align: right;">${position.average_price}</td>
-                    <td class="mono" style="text-align: right; color: ${priceColor};">${position.current_price}</td>
-                    <td class="mono" style="text-align: right;">${position.max_price}</td>
-                    <td class="mono" style="text-align: right;">${position.stop_loss_price}</td>
+                    <td class="mono" style="text-align: right;">${position.quantity.toLocaleString()}</td>
+                    <td class="mono" style="text-align: right;">${price_currency}${position.average_price.toLocaleString()}</td>
+                    <td class="mono" style="text-align: right; color: ${priceColor};">${price_currency}${position.current_price.toLocaleString()}</td>
+                    <td class="mono" style="text-align: right;">${price_currency}${position.max_price.toLocaleString()}</td>
+                    <td class="mono" style="text-align: right; color: ${stopLossColor};">${price_currency}${position.stop_loss_price.toLocaleString()} (${position.stop_loss_percentage}%)</td>
+                    <td class="mono" style="text-align: right; color: ${manual_stop_loss_color};">${manual_stop_loss_price}</td>
                     <td class="mono" style="text-align: right; color: ${profitColor};">${profitText}</td>
                     <td class="mono" style="text-align: center;">${macd_signal}</td>
-                    <td class="mono" style="text-align: center;"">${macd_crossover}</td>
+                    <td class="mono" style="text-align: center;">${macd_crossover}</td>
+                    <td class="mono" style="text-align: right; color: ${sma_17_color};">${sma_17}</td>
                 `;
                 tbody.appendChild(tr);
 
                 if (priceColor) {
-                    setTimeout(() => {
-                        tr.cells[5].style.color = "yellow";
-                    }, 600);
+                    tr.cells[4].style.color = "yellow";
                 }
                 previousData[position.ticker] = { current_price: position.current_price };
             });
@@ -212,7 +264,8 @@
             console.error("Fetch error:", err);
         }
     }
-    setInterval(fetchData, 20000);
+
+    setInterval(fetchData, 30000);
     fetchData();
     </script>
 </body>
