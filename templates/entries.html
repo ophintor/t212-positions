@@ -109,8 +109,7 @@
                             <tr>
                                 <td class="mono" style="text-align: left; width: 16%;">{{ item.ticker }}</td>
                                 <td class="mono" style="text-align: right; width: 12%;">
-                                    {{ "USD" if index_key == "SP500" else "GBP" }}
-                                    {{ item.price }}
+                                    {{ "USD" if index_key in ["SP500", "NASDAQ100"] else "GBP" }} {{ item.price }}
                                 </td>
                                 <td class="mono" style="text-align: right; width: 12%;">{{ item.atr }}</td>
                                 <td class="mono" style="text-align: right; width: 12%;">{{ item.atr_percent }}%</td>
@@ -120,7 +119,7 @@
                                     {{ (risk / item.atr)|int if item.atr and item.atr > 0 else "N/A" }}
                                 </td>
                                 <td class="mono" style="text-align: right; width: 13%;">
-                                    {{ "USD" if index_key == "SP500" else "GBP" }}
+                                    {{ "USD" if index_key in ["SP500", "NASDAQ100"] else "GBP" }}
                                     {{ "%.2f"|format((risk / item.atr) * item.price) if item.atr and item.atr > 0 else "N/A" }}
                                 </td>
                             </tr>
