@@ -52,6 +52,12 @@ def initialize_database(db):
             last_notified_time TIMESTAMP
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS flags (
+            flag TEXT PRIMARY KEY,
+            status BOOLEAN
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -394,6 +400,37 @@ def update_max_price(ticker, price, db):
     conn.commit()
     conn.close()
 
+def update_flag(flag, db):
+    conn = get_db(db)
+    c = conn.cursor()
+
+    c.execute("SELECT status FROM flags WHERE flag=?", (flag,))
+    row = c.fetchone()
+
+    if row is None:
+        c.execute("INSERT INTO flags (flag, status) VALUES (?, ?)",
+                  (flag, 'False'))
+    else:
+        current_status = row[0]
+        new_status = not current_status
+        c.execute("UPDATE flags SET status=? WHERE flag=?",
+                  (new_status, flag))
+
+    conn.commit()
+    conn.close()
+
+def get_flag(flag, db, default=False):
+    conn = get_db(db)
+    c = conn.cursor()
+    c.execute("SELECT status FROM flags WHERE flag=?", (flag,))
+    row = c.fetchone()
+    conn.close()
+
+    if row is None:
+        return default
+
+    return row[0]
+
 def update_stop_loss(ticker, stop_loss_price, db):
     conn = get_db(db)
     c = conn.cursor()
@@ -625,8 +662,8 @@ def get_current_positions(db, all_tickers, risk_percentage = RISK_PERCENTAGE):
         position_dict['sma_17'] = sma_value if (sma_value is not None and not math.isnan(sma_value)) else 0.0
         logger.info(f"SMA(17) for {position_dict['short_name']}: {position_dict['sma_17']}")
 
-        # Check if stop loss has been reached, then sell at market and send a message (only weekdays)
-        if position_dict["stop_loss_price"] >= position_dict["current_price"] and date.today().weekday() < 5:
+        # Check if stop loss has been reached, then if auto_sell is enabled, sell at market and send a message (only weekdays)
+        if get_flag("auto_sell", db) and position_dict["stop_loss_price"] >= position_dict["current_price"] and date.today().weekday() < 5:
             # Attempt to sell - It will only sell if there are no stop losses already set
             # and the error code will be 'SellingEquityNotOwned'
             rc = sell(position_dict['ticker'], position_dict['quantity'])
@@ -652,7 +689,8 @@ def get_current_positions(db, all_tickers, risk_percentage = RISK_PERCENTAGE):
     # Build json
     result = {
         "positions": sorted(all_positions, key=lambda order: order['profit_pct'], reverse=True),
-        "total_risk": total_risk / total_capital * 100
+        "total_risk": total_risk / total_capital * 100,
+        "auto_sell": get_flag("auto_sell", db)
     }
 
     # logger.info(tabulate(result['positions'], headers='keys', tablefmt='simple'))

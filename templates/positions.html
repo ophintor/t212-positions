@@ -78,13 +78,14 @@
             color: #ddff00;
             border-bottom: 1px solid #ddff00;
         }
+
     </style>
 </head>
 <body>
     <h1>🧘🏽‍♂️ Current Positions</h1>
     <h2 id="total-risk">Total risk: --</h2>
-    <p id="last-updated"><strong>Last updated:</strong>--</p>
-    <p>[ <a class="subtle-link" href="/entries">Check potential entries</a> ]</p>
+    <p id="last-updated"><strong>Last updated:</strong>-- | Auto-sell: --</p>
+    <p>[ <a class="subtle-link" href="/entries">Check potential entries</a></p>
 
     <table>
         <thead>
@@ -127,6 +128,25 @@
     <script>
     let previousData = {};
 
+    function toggleAutoSell(event) {
+        event.preventDefault(); // Prevent page refresh
+
+        fetch('/autosell', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Update the display with the new status
+            auto_sell = data.auto_sell;
+            const autoSellStatus = auto_sell ?
+                '<a href="#" onclick="toggleAutoSell(event)" style="color: green;"><strong>On</strong></a>' :
+                '<a href="#" onclick="toggleAutoSell(event)" style="color: red;"><strong>Off</strong></a>';
+            document.getElementById("last-updated").innerHTML = "Last updated: " +
+                new Date().toLocaleTimeString() + " | Auto-sell: " + autoSellStatus;
+        })
+        .catch(error => console.error('Error:', error));
+    }
+
     async function fetchData() {
         try {
             const res = await fetch('/positions');
@@ -135,10 +155,17 @@
             console.log("Received data:", data);  // Debug log
             console.log("total_risk value:", data.total_risk);  // Debug log
             const positionsData = data.positions;
-            const total_risk = data.total_risk;
             const now = new Date();
 
-            document.getElementById("last-updated").textContent = "Last updated: " + now.toLocaleTimeString();
+            // Sort out auto-sell link
+            const auto_sell = data.auto_sell;
+            const autoSellStatus = auto_sell ?
+                '<a href="#" onclick="toggleAutoSell(event)" style="color: green;"><strong>On</strong></a>' :
+                '<a href="#" onclick="toggleAutoSell(event)" style="color: red;"><strong>Off</strong></a>';
+            document.getElementById("last-updated").innerHTML = "Last updated: " + now.toLocaleTimeString() + " | Auto-sell: " + autoSellStatus;
+
+            // Sort out risk display
+            const total_risk = data.total_risk;
             document.getElementById("total-risk").textContent = "Total risk: " + total_risk.toFixed(2) + "%";
 
             if (total_risk > 7.0 ){

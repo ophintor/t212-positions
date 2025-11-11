@@ -22,6 +22,11 @@ def get_entries():
     entries = papishares.get_last_entries()
     return render_template('entries.html', data=entries, risk=70)
 
+@app.route('/autosell', methods=['POST'])
+def autosell():
+    new_status = papishares.update_flag('auto_sell', db)
+    return jsonify({'auto_sell': new_status})
+
 @app.route('/')
 def index():
     return render_template('positions.html')
