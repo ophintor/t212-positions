@@ -666,6 +666,7 @@ def get_current_positions(db, all_tickers, risk_percentage = RISK_PERCENTAGE):
         if get_flag("auto_sell", db) and position_dict["stop_loss_price"] >= position_dict["current_price"] and date.today().weekday() < 5:
             # Attempt to sell - It will only sell if there are no stop losses already set
             # and the error code will be 'SellingEquityNotOwned'
+
             rc = sell(position_dict['ticker'], position_dict['quantity'])
 
             if "type" in rc and rc["type"] == "/api-errors/selling-equity-not-owned":
