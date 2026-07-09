@@ -18,6 +18,7 @@ T212_API_KEY = os.getenv("T212_API_KEY")
 T212_SECRET_KEY = os.getenv("T212_SECRET_KEY")
 TELEGRAM_BOT_TOKEN =os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+ENTRIES_PATH = "/entries/suggested_entries.json"
 
 RISK_PERCENTAGE = 0.7 # Percentage of account to risk on all positions
 TOTAL_RISK_PERCENTAGE = 7.0 # Total percentage of account to risk across all positions
@@ -728,17 +729,11 @@ def get_pending_orders(all_tickers):
     return orders
 
 def get_last_entries():
-    json_url = 'http://stuff.dabeed.net/suggested_entries.json'
-
     try:
-        response = requests.get(json_url, timeout=10)
-        response.raise_for_status()
-
-        # Parse JSON
-        data = response.json()
-        return data
-    except requests.exceptions.RequestException as e:
-        return f"Error fetching data from URL: {str(e)}"
+        with open(ENTRIES_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return f"Error: entries file not found at {ENTRIES_PATH}"
     except json.JSONDecodeError as e:
         return f"Error parsing JSON: {str(e)}"
     except Exception as e:

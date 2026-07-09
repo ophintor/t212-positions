@@ -55,7 +55,14 @@ spec:
           volumeMounts:
             - name: sqlite3-storage
               mountPath: /data
+            - name: entries-storage
+              mountPath: {{ .Values.entriesVolume.mountPath }}
+              readOnly: true
       volumes:
         - name: sqlite3-storage
           persistentVolumeClaim:
             claimName: sqlite3-pvc
+        - name: entries-storage
+          hostPath:
+            path: {{ .Values.entriesVolume.hostPath }}
+            type: DirectoryOrCreate

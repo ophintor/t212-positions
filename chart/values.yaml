@@ -40,6 +40,10 @@ secrets:
   enabled: true
   name: papishares-secrets
 
+entriesVolume:
+  hostPath: /home/dp/agent_shared_fs/papishares
+  mountPath: /entries
+
 ingress:
   enabled: true
   className: nginx
@@ -70,3 +74,5 @@ env: {}
 extraEnv:
   - name: "DB_PATH"
     value: "/data/papishares.db"
+  - name: "ENTRIES_PATH"
+    value: "/entries/suggested_entries.json"
