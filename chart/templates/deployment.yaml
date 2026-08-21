@@ -7,6 +7,15 @@ metadata:
     {{ include "papishares.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  # Recreate, not RollingUpdate. The app keeps its state in a single SQLite
+  # file on a ReadWriteOnce volume, and SQLite allows exactly one writer. The
+  # default strategy (maxSurge 25%, which rounds up to 1) starts the new pod
+  # BEFORE removing the old one - and on a single node RWO happily lets both
+  # mount the same claim, so for the length of every rollout two Flask
+  # processes write the same database. Recreate stops the old pod first.
+  # Cost: a few seconds of downtime per deploy, which is the right trade.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: {{ include "papishares.fullname" . }}

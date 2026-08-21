@@ -1,4 +1,4 @@
-apiVersion: v1
+apiVersion: v2
 name: papishares
 description: A Helm chart for the Papishares application
 type: application

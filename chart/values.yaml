@@ -4,8 +4,14 @@ namespace: papishares
 
 image:
   repository: ophintor/papishares
-  tag: "latest"
-  pullPolicy: Always
+  # Immutable, date-based tag - same scheme as ophintor/jenkins-agent. A
+  # floating "latest" gives ArgoCD nothing to compare: the manifest never
+  # changes, so a rebuilt image is invisible to it and rollback is impossible.
+  # Bump this line to deploy a new build; that commit IS the deployment.
+  tag: "2026.07.09-1"
+  # Safe now the tag is immutable, and one less registry round-trip per pod
+  # start on a machine that does not have any to spare.
+  pullPolicy: IfNotPresent
 
 service:
   type: ClusterIP
@@ -36,6 +42,9 @@ tolerations: []
 
 affinity: {}
 
+# The Secret itself is NOT rendered by this chart any more - it is a
+# SealedSecret in korea-k8s-charts (argocd/sealed-secrets/papishares-*.yaml).
+# `enabled` still gates the envFrom reference in deployment.yaml.
 secrets:
   enabled: true
   name: papishares-secrets
@@ -68,8 +77,6 @@ autoscaling:
 podAnnotations: {}
 podSecurityContext: {}
 securityContext: {}
-
-env: {}
 
 extraEnv:
   - name: "DB_PATH"
