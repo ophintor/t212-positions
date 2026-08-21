@@ -31,7 +31,7 @@ readinessProbe:
 
 livenessProbe:
   path: /health
-  post: 5000
+  port: 5000
   initialDelaySeconds: 15
   periodSeconds: 20
   timeoutSeconds: 2
