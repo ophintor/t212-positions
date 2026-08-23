@@ -85,6 +85,17 @@ jobs:
           VERSION: ${{ steps.bump.outputs.new_version }}
         run: |
           set -eu
+
+          # Re-running a completed release replays against the original commit
+          # and computes the same version again. The tag action notices the tag
+          # exists and returns early -- but it sets new_tag *before* that check,
+          # so this step still fires and dies on "tag already exists". A rerun
+          # should be a no-op, not a red X.
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "${TAG} already exists: this commit has been released already."
+            exit 0
+          fi
+
           CHART=helm/papishares/Chart.yaml
 
           # appVersion is what the chart deploys when no image tag is supplied,
