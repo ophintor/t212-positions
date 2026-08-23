@@ -3,15 +3,17 @@ replicaCount: 1
 namespace: papishares
 
 image:
-  repository: ophintor/papishares
-  # Immutable, date-based tag - same scheme as ophintor/jenkins-agent. A
-  # floating "latest" gives ArgoCD nothing to compare: the manifest never
-  # changes, so a rebuilt image is invisible to it and rollback is impossible.
-  # Bump this line to deploy a new build; that commit IS the deployment.
-  tag: "2026.07.09-1"
-  # Safe now the tag is immutable, and one less registry round-trip per pod
-  # start on a machine that does not have any to spare.
+  repository: ghcr.io/ophintor/papishares
+  # No tag. It falls back to this chart's appVersion, which the release workflow
+  # stamps with the version it is releasing -- so what is deployed is derived
+  # from the tag ArgoCD is pinned to and the two cannot disagree. This used to
+  # be a hand-bumped date string, and the commit that changed it was the
+  # deployment; now the release is.
   pullPolicy: IfNotPresent
+
+# The package is private, matching the repository, so the cluster supplies a
+# credential to pull it. The chart ships none.
+imagePullSecrets: []
 
 service:
   type: ClusterIP
@@ -50,23 +52,18 @@ secrets:
   name: papishares-secrets
 
 entriesVolume:
-  hostPath: /home/dp/agent_shared_fs/papishares
+  # A path on a specific machine, so the cluster supplies it.
+  hostPath: ""
   mountPath: /entries
 
+# No hostname, ingress class or issuer here: they name one cluster, and a chart
+# that ships someone else's hostname installs happily and then serves nothing.
 ingress:
   enabled: true
-  className: nginx
-  annotations:
-      cert-manager.io/cluster-issuer: ca-issuer
-  hosts:
-    - host: papishares.papichulo
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - hosts:
-        - papishares.papichulo
-      secretName: papishares-tls
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
 
 autoscaling:
   enabled: false

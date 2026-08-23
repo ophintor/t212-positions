@@ -25,9 +25,17 @@ spec:
         app: {{ include "papishares.fullname" . }}
       annotations: {{ toYaml .Values.podAnnotations | nindent 8 }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: papishares
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          {{- /* Falls back to the chart's own appVersion, which the release
+              workflow stamps with the version being released -- so the deployed
+              version is derived from the tag ArgoCD is pinned to and cannot
+              drift from it. A Helm comment, not a YAML one: a `#` here is
+              emitted into the manifest sent to the API. */}}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.containerPort }}

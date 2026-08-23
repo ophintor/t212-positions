@@ -1,0 +1,191 @@
+name: Release
+
+# Every push to main is tagged and published — but only after the checks pass,
+# because a tag on a broken commit is worse than no tag at all.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write        # needed to push the tag and create the release
+  packages: write        # needed to publish the image to ghcr.io
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # There is no test suite for this app. Rather than pretend otherwise with
+      # a green tick that proves nothing, these are the three things that can
+      # honestly be checked: the dependencies still resolve, the Python still
+      # compiles, and the chart still renders.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Dependencies resolve
+        run: pip install -r requirements.txt
+
+      - name: Python compiles
+        run: python -m compileall -q .
+
+      - uses: azure/setup-helm@v4
+
+      - name: Chart renders
+        # With the values the cluster actually supplies, not just the defaults —
+        # the defaults are deliberately empty, so linting them alone would miss
+        # a template that breaks on a real hostname.
+        run: |
+          helm lint helm/papishares
+          helm template papishares helm/papishares \
+            --set ingress.hosts[0].host=example.test \
+            --set ingress.hosts[0].paths[0].path=/ \
+            --set ingress.hosts[0].paths[0].pathType=Prefix \
+            --set entriesVolume.hostPath=/tmp/entries > /dev/null
+
+  tag:
+    name: Tag
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.bump.outputs.new_tag }}
+      version: ${{ steps.bump.outputs.new_version }}
+      changelog: ${{ steps.bump.outputs.changelog }}
+    steps:
+      # Full history: the tagger needs previous tags to know the next one.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Work out the next version
+        id: bump
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Conventional Commits decide the bump: feat -> minor, fix/perf ->
+          # patch, BREAKING CHANGE -> major. Anything unclassified still gets a
+          # patch, so every push to main is released.
+          default_bump: patch
+          tag_prefix: v
+          release_branches: main
+          # Decide the version here; create the tag below, on the commit that
+          # carries that version in the chart.
+          dry_run: true
+
+      - name: Stamp the version into the chart, then tag it
+        if: steps.bump.outputs.new_tag != ''
+        env:
+          TAG: ${{ steps.bump.outputs.new_tag }}
+          VERSION: ${{ steps.bump.outputs.new_version }}
+        run: |
+          set -eu
+          CHART=helm/papishares/Chart.yaml
+
+          # appVersion is what the chart deploys when no image tag is supplied,
+          # so the deployed version is derived from the git tag rather than
+          # recorded a second time. It has to be in the commit the tag points
+          # at: ArgoCD renders the chart from the tag, so a stamp made
+          # afterwards would never be seen.
+          sed -i "s/^appVersion: .*/appVersion: \"${VERSION}\"/" "$CHART"
+          grep -q "^appVersion: \"${VERSION}\"$" "$CHART"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$CHART"
+          # [skip ci] is belt and braces. A push made with GITHUB_TOKEN does not
+          # trigger workflows, so this cannot loop.
+          git commit -m "chore(release): ${VERSION} [skip ci]"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin HEAD:main
+          git push origin "$TAG"
+
+  release:
+    name: Release notes
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.tag.outputs.tag }}
+          name: ${{ needs.tag.outputs.tag }}
+          body: ${{ needs.tag.outputs.changelog }}
+
+  image:
+    name: Image
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.tag.outputs.tag }}
+
+      # Required for the gha cache below: the runner's default buildx driver is
+      # `docker`, which cannot export a cache and says so only after the build
+      # has otherwise succeeded.
+      - uses: docker/setup-buildx-action@v4
+
+      # ghcr.io authenticates with the token GitHub already hands every run:
+      # no secret to create, rotate, or forget.
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          # korea is amd64 while the usual build machine is an arm64 Mac. Pinned
+          # rather than left to the runner: getting this wrong produces
+          # `exec format error` and a pod that never starts.
+          platforms: linux/amd64
+          push: true
+          # No `latest`: the deployment is pinned to an exact version in git,
+          # and a floating tag is a second source of truth to disagree with it.
+          tags: ghcr.io/ophintor/papishares:${{ needs.tag.outputs.version }}
+          # Links the package to this repository, so it inherits the repo's
+          # access rather than sitting in the packages list as an orphan.
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy
+    needs: [tag, image]
+    if: needs.tag.outputs.tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Credentials are configured
+        env:
+          TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Missing repository secret: RENOVATE_TOKEN"
+            echo "::error::Needs write access to ophintor/korea-k8s-charts."
+            echo "::error::The image is pushed; only the deployment PR was not raised."
+            exit 1
+          fi
+
+      - uses: renovatebot/github-action@v46.2.2
+        env:
+          # What may be raised and merged is decided by that repo's
+          # renovate.json. Restating it here would be a second copy to disagree
+          # with the first.
+          RENOVATE_REPOSITORIES: ophintor/korea-k8s-charts
+          RENOVATE_PLATFORM: github
+          RENOVATE_ONBOARDING: "false"
+          RENOVATE_REQUIRE_CONFIG: required
+          RENOVATE_GIT_AUTHOR: David Pintor <david@denocte.com>
+          LOG_LEVEL: info
+        with:
+          token: ${{ secrets.RENOVATE_TOKEN }}
