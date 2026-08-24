@@ -197,6 +197,15 @@ jobs:
           RENOVATE_ONBOARDING: "false"
           RENOVATE_REQUIRE_CONFIG: required
           RENOVATE_GIT_AUTHOR: David Pintor <david@denocte.com>
+          # ghcr.io is a different host from api.github.com, so it gets its own
+          # credential. This is what lets RENOVATE_TOKEN stay scoped to the
+          # ophintor repositories: the journal's release version is read from
+          # its container package here, not from its git tags in another org.
+          # Read-only, and provably: this PAT carries read:packages and nothing
+          # else, so it cannot see a repository at all.
+          RENOVATE_HOST_RULES: >-
+            [{"matchHost":"ghcr.io","hostType":"docker",
+              "username":"ophintor","password":"${{ secrets.GHCR_READ_TOKEN }}"}]
           LOG_LEVEL: info
         with:
           token: ${{ secrets.RENOVATE_TOKEN }}
