@@ -170,6 +170,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # The last hop: ask korea-k8s-charts to run Renovate now, so a release does
+  # not sit undeployed until its four-hourly sweep. Renovate itself runs only
+  # there, with the rules in its renovate.json -- this job just pokes it.
+  #
+  # It authenticates as the ophintor-renovate GitHub App, which needs only
+  # Actions: write on that one repository for this. The App's key does not
+  # expire, unlike the personal token this used to copy into every repo.
   deploy:
     name: Deploy
     needs: [tag, image]
@@ -178,34 +185,27 @@ jobs:
     steps:
       - name: Credentials are configured
         env:
-          TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+          APP_ID: ${{ secrets.RENOVATE_APP_ID }}
+          APP_KEY: ${{ secrets.RENOVATE_APP_KEY }}
         run: |
-          if [ -z "$TOKEN" ]; then
-            echo "::error::Missing repository secret: RENOVATE_TOKEN"
-            echo "::error::Needs write access to ophintor/korea-k8s-charts."
-            echo "::error::The image is pushed; only the deployment PR was not raised."
+          if [ -z "$APP_ID" ] || [ -z "$APP_KEY" ]; then
+            echo "::error::Missing repository secrets RENOVATE_APP_ID / RENOVATE_APP_KEY (the ophintor-renovate App)."
+            echo "::error::The image is pushed; only the deployment was not triggered. The next Renovate sweep will pick it up."
             exit 1
           fi
 
-      - uses: renovatebot/github-action@v46.2.2
-        env:
-          # What may be raised and merged is decided by that repo's
-          # renovate.json. Restating it here would be a second copy to disagree
-          # with the first.
-          RENOVATE_REPOSITORIES: ophintor/korea-k8s-charts
-          RENOVATE_PLATFORM: github
-          RENOVATE_ONBOARDING: "false"
-          RENOVATE_REQUIRE_CONFIG: required
-          RENOVATE_GIT_AUTHOR: David Pintor <david@denocte.com>
-          # ghcr.io is a different host from api.github.com, so it gets its own
-          # credential. This is what lets RENOVATE_TOKEN stay scoped to the
-          # ophintor repositories: the journal's release version is read from
-          # its container package here, not from its git tags in another org.
-          # Read-only, and provably: this PAT carries read:packages and nothing
-          # else, so it cannot see a repository at all.
-          RENOVATE_HOST_RULES: >-
-            [{"matchHost":"ghcr.io","hostType":"docker",
-              "username":"ophintor","password":"${{ secrets.GHCR_READ_TOKEN }}"}]
-          LOG_LEVEL: info
+      - uses: actions/create-github-app-token@v2
+        id: app
         with:
-          token: ${{ secrets.RENOVATE_TOKEN }}
+          app-id: ${{ secrets.RENOVATE_APP_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_KEY }}
+          owner: ophintor
+          repositories: korea-k8s-charts
+
+      - name: Run Renovate in korea-k8s-charts
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ needs.tag.outputs.version }}
+        run: |
+          gh workflow run renovate.yml --repo ophintor/korea-k8s-charts
+          echo "Triggered Renovate for ${VERSION}: https://github.com/ophintor/korea-k8s-charts/actions/workflows/renovate.yml" >> "$GITHUB_STEP_SUMMARY"
